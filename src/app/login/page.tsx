@@ -6,7 +6,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen bg-brand-cream">
       <div className="relative hidden w-1/2 lg:block">
         <Image
-          src="/Hình đại diện Trạm.jpg"
+          src="/tram-interior.jpg"
           alt="Không gian TRẠM Coworking Space"
           fill
           priority
