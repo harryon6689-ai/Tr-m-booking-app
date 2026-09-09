@@ -6,6 +6,7 @@ import type { Database, UserPermissions, UserRole } from "@/lib/types/database";
 import {
   createStaffAccount,
   updateStaffAccount,
+  deleteStaffAccount,
   resetStaffPassword,
   type StaffAccountInput,
 } from "@/lib/actions/staff";
@@ -35,6 +36,7 @@ export default function StaffClient({
   const [mode, setMode] = useState<"list" | "form">("list");
   const [editing, setEditing] = useState<StaffAccount | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function openCreate() {
     setEditing(null);
@@ -61,6 +63,24 @@ export default function StaffClient({
       return;
     }
     alert("Đã đặt lại mật khẩu thành công.");
+  }
+
+  async function handleDelete(account: StaffAccount) {
+    if (
+      !confirm(
+        `Xác nhận xóa tài khoản "${account.name}"? Hành động này không thể hoàn tác.`
+      )
+    ) {
+      return;
+    }
+    setDeletingId(account.id);
+    const result = await deleteStaffAccount(account.id);
+    setDeletingId(null);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    router.refresh();
   }
 
   if (mode === "form") {
@@ -142,6 +162,15 @@ export default function StaffClient({
                     >
                       Đặt lại mật khẩu
                     </button>
+                    {account.id !== currentUserId && (
+                      <button
+                        onClick={() => handleDelete(account)}
+                        disabled={deletingId === account.id}
+                        className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
+                      >
+                        {deletingId === account.id ? "Đang xóa..." : "Xóa"}
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

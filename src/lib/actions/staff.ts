@@ -155,6 +155,22 @@ export async function updateStaffAccount(
   return { error: null };
 }
 
+export async function deleteStaffAccount(id: string) {
+  const { error: authError, currentUserId } = await requireAdmin();
+  if (authError) return { error: authError };
+
+  if (id === currentUserId) {
+    return { error: "Bạn không thể tự xóa tài khoản đang đăng nhập của mình." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/staff");
+  return { error: null };
+}
+
 export async function resetStaffPassword(id: string, newPassword: string) {
   const { error: authError } = await requireAdmin();
   if (authError) return { error: authError };
