@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f3efda; /* nền be */
+  --foreground: #2c4a38; /* xanh đậm - chữ/viền */
+  --color-brand-cream: #f3efda;
+  --color-brand-forest: #2c4a38;
+  --color-brand-amber: #c97a2b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand-cream: var(--color-brand-cream);
+  --color-brand-forest: var(--color-brand-forest);
+  --color-brand-amber: var(--color-brand-amber);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@keyframes marquee-ltr {
+  from {
+    transform: translateX(-100vw);
+  }
+  to {
+    transform: translateX(100vw);
+  }
+}
+
+.marquee-track {
+  animation: marquee-ltr 40s linear infinite;
+}
