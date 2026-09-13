@@ -140,6 +140,23 @@ export async function setKolEffectivenessRating(id: string, rating: number) {
   return { error: null };
 }
 
+export async function setKolStatus(id: string, status: BookingStatus) {
+  const supabase = await createClient();
+  const { userId, error: authError } = await requireEditAccess(supabase);
+
+  if (authError) return { error: authError };
+
+  const { error } = await supabase
+    .from("kol_bookings")
+    .update({ status, created_by: userId })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/kol");
+  return { error: null };
+}
+
 export async function cancelKolBooking(id: string) {
   const supabase = await createClient();
   const { userId, error: authError } = await requireEditAccess(supabase);

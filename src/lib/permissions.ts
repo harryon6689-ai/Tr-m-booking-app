@@ -2,6 +2,8 @@ import type { UserPermissions, UserRole } from "@/lib/types/database";
 
 export const PERMISSION_MODULES = [
   { key: "floor_map", path: "/", label: "Bản đồ mặt bằng" },
+  { key: "checkin", path: "/check-in", label: "Khách đã booking" },
+  { key: "quick_booking", path: "/quick-booking", label: "Đặt lịch nhanh" },
   { key: "kol", path: "/kol", label: "Lịch KOL Review" },
   { key: "history", path: "/history", label: "Lịch sử" },
   { key: "fixed_customers", path: "/fixed-customers", label: "Khách cố định" },
@@ -11,6 +13,8 @@ export const PERMISSION_MODULES = [
 
 export const DEFAULT_STAFF_PERMISSIONS: UserPermissions = {
   floor_map: true,
+  checkin: true,
+  quick_booking: true,
   kol: true,
   history: true,
   fixed_customers: true,

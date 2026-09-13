@@ -5,7 +5,12 @@ export type DiscountType = "phòng" | "đồ uống";
 export type UserRole = "admin" | "staff";
 export type CustomerOrgType = "cá nhân" | "công ty/tổ chức";
 export type PricingMode = "free_hours_plus_overage" | "flat_rate";
-export type RecurrenceType = "hàng tuần" | "hàng tháng" | "ngày cụ thể";
+export type RecurrenceType =
+  | "hàng tuần"
+  | "hàng tháng"
+  | "hàng quý"
+  | "hàng năm"
+  | "ngày cụ thể";
 
 export const EQUIPMENT_OPTIONS = [
   "Máy chiếu",
@@ -22,6 +27,8 @@ export interface UserPermissions {
   fixed_customers: boolean;
   preferred_customers: boolean;
   discount_rules: boolean;
+  checkin: boolean;
+  quick_booking: boolean;
 }
 
 export interface Database {
@@ -109,6 +116,8 @@ export interface Database {
           equipment_needed: string[];
           equipment_note: string | null;
           pricing_rule_id: string | null;
+          deposit_refunded: boolean;
+          overage_fee: number;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -131,6 +140,8 @@ export interface Database {
           equipment_needed?: string[];
           equipment_note?: string | null;
           pricing_rule_id?: string | null;
+          deposit_refunded?: boolean;
+          overage_fee?: number;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -153,6 +164,8 @@ export interface Database {
           equipment_needed?: string[];
           equipment_note?: string | null;
           pricing_rule_id?: string | null;
+          deposit_refunded?: boolean;
+          overage_fee?: number;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -344,12 +357,14 @@ export interface Database {
           recurrence_type: RecurrenceType;
           weekday: number | null;
           day_of_month: number | null;
+          month_of_year: number | null;
           custom_dates: string[] | null;
           start_time: string;
           end_time: string;
           effective_from: string;
           effective_until: string | null;
           active: boolean;
+          deposit_amount: number;
           note: string | null;
           created_by: string | null;
           created_at: string;
@@ -363,12 +378,14 @@ export interface Database {
           recurrence_type: RecurrenceType;
           weekday?: number | null;
           day_of_month?: number | null;
+          month_of_year?: number | null;
           custom_dates?: string[] | null;
           start_time: string;
           end_time: string;
           effective_from?: string;
           effective_until?: string | null;
           active?: boolean;
+          deposit_amount?: number;
           note?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -382,11 +399,13 @@ export interface Database {
           recurrence_type?: RecurrenceType;
           weekday?: number | null;
           day_of_month?: number | null;
+          month_of_year?: number | null;
           custom_dates?: string[] | null;
           start_time?: string;
           end_time?: string;
           effective_from?: string;
           effective_until?: string | null;
+          deposit_amount?: number;
           active?: boolean;
           note?: string | null;
           created_by?: string | null;
@@ -452,6 +471,37 @@ export interface Database {
           updated_at?: string;
         };
         Relationships: [];
+      };
+      fixed_customer_checkins: {
+        Row: {
+          fixed_customer_id: string;
+          occurrence_date: string;
+          arrived: boolean;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          fixed_customer_id: string;
+          occurrence_date: string;
+          arrived?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          fixed_customer_id?: string;
+          occurrence_date?: string;
+          arrived?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "fixed_customer_checkins_fixed_customer_id_fkey";
+            columns: ["fixed_customer_id"];
+            referencedRelation: "fixed_customers";
+            referencedColumns: ["id"];
+          }
+        ];
       };
     };
     Views: Record<string, never>;

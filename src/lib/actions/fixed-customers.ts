@@ -11,12 +11,14 @@ export interface FixedCustomerInput {
   recurrence_type: RecurrenceType;
   weekday: number | null;
   day_of_month: number | null;
+  month_of_year: number | null;
   custom_dates: string[] | null;
   start_time: string; // "HH:mm"
   end_time: string; // "HH:mm"
   effective_from: string; // "yyyy-mm-dd"
   effective_until: string | null;
   active: boolean;
+  deposit_amount: number;
   note: string;
 }
 

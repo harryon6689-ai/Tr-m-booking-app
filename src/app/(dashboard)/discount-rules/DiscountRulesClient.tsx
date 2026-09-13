@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/pricing-rules";
 import CurrencyInput from "@/components/CurrencyInput";
 import { formatPricingRule, formatAttendeeRange } from "@/lib/pricing-rules-utils";
+import ExportExcelButton from "@/components/ExportExcelButton";
 
 type DiscountRule = Database["public"]["Tables"]["discount_rules"]["Row"];
 type PricingRule = Database["public"]["Tables"]["pricing_rules"]["Row"];
@@ -90,7 +91,20 @@ function DiscountPercentTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-end">
+        <ExportExcelButton
+          filename="chinh-sach-giam-gia"
+          sheetName="Giảm giá"
+          rows={discountRules.map((r) => ({
+            "Loại khách": r.customer_type,
+            "Áp dụng cho": r.discount_type,
+            "% mặc định": r.default_percent,
+            "Đang áp dụng": r.active ? "Có" : "Không",
+          }))}
+        />
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
       <table className="w-full text-left text-sm">
         <thead className="bg-brand-cream text-brand-forest/70">
           <tr>
@@ -164,6 +178,7 @@ function DiscountPercentTable({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -203,17 +218,33 @@ function PricingRulesPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      {isAdmin && (
-        <button
-          onClick={() => {
-            setEditing(null);
-            setMode("form");
-          }}
-          className="w-fit rounded-lg bg-brand-forest px-4 py-2 font-bold text-brand-cream hover:bg-brand-forest/90"
-        >
-          + Thêm chính sách giá
-        </button>
-      )}
+      <div className="flex items-center justify-between gap-3">
+        {isAdmin ? (
+          <button
+            onClick={() => {
+              setEditing(null);
+              setMode("form");
+            }}
+            className="w-fit rounded-lg bg-brand-forest px-4 py-2 font-bold text-brand-cream hover:bg-brand-forest/90"
+          >
+            + Thêm chính sách giá
+          </button>
+        ) : (
+          <span />
+        )}
+        <ExportExcelButton
+          filename="chinh-sach-gia-phong"
+          sheetName="Giá phòng"
+          rows={pricingRules.map((r) => ({
+            "Vị trí": r.location_type,
+            "Chính sách": r.rule_name,
+            "Số người": formatAttendeeRange(r),
+            Giá: formatPricingRule(r),
+            "Đồ uống": r.requires_drink_per_person ? "Bắt buộc" : "-",
+            "Trạng thái": r.active ? "Đang áp dụng" : "Tạm ngưng",
+          }))}
+        />
+      </div>
 
       <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
         <table className="w-full text-left text-sm">

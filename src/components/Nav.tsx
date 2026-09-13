@@ -15,6 +15,8 @@ interface NavProps {
 
 const links = [
   { href: "/", label: "Bản đồ mặt bằng", roles: ["admin", "staff"], permKey: "floor_map" },
+  { href: "/check-in", label: "Khách đã booking", roles: ["admin", "staff"], permKey: "checkin" },
+  { href: "/quick-booking", label: "Đặt lịch nhanh", roles: ["admin", "staff"], permKey: "quick_booking" },
   { href: "/kol", label: "Lịch KOL Review", roles: ["admin", "staff"], permKey: "kol" },
   { href: "/history", label: "Lịch sử", roles: ["admin", "staff"], permKey: "history" },
   { href: "/fixed-customers", label: "Khách cố định", roles: ["admin", "staff"], permKey: "fixed_customers" },

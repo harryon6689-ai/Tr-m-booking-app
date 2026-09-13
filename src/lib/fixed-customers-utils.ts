@@ -18,6 +18,19 @@ export function matchesFixedSchedule(rule: FixedCustomer, date: Date): boolean {
       return rule.weekday === date.getDay();
     case "hàng tháng":
       return rule.day_of_month === date.getDate();
+    case "hàng quý": {
+      if (rule.day_of_month !== date.getDate()) return false;
+      const anchor = new Date(`${rule.effective_from}T00:00:00`);
+      const monthsDiff =
+        (date.getFullYear() - anchor.getFullYear()) * 12 +
+        (date.getMonth() - anchor.getMonth());
+      return monthsDiff >= 0 && monthsDiff % 3 === 0;
+    }
+    case "hàng năm":
+      return (
+        rule.month_of_year === date.getMonth() + 1 &&
+        rule.day_of_month === date.getDate()
+      );
     case "ngày cụ thể":
       return (rule.custom_dates ?? []).includes(dateStr);
     default:

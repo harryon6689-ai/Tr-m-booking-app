@@ -192,3 +192,55 @@ export async function cancelBooking(id: string) {
   revalidatePath("/");
   return { error: null };
 }
+
+export async function setBookingArrived(id: string, arrived: boolean) {
+  const supabase = await createClient();
+  const { userId, error: authError } = await requireEditAccess(supabase);
+
+  if (authError) return { error: authError };
+
+  const { error } = await supabase
+    .from("bookings")
+    .update({ status: arrived ? "đã tới" : "đã đặt", created_by: userId })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/check-in");
+  revalidatePath("/");
+  return { error: null };
+}
+
+export async function setDepositRefunded(id: string, refunded: boolean) {
+  const supabase = await createClient();
+  const { error: authError } = await requireEditAccess(supabase);
+
+  if (authError) return { error: authError };
+
+  const { error } = await supabase
+    .from("bookings")
+    .update({ deposit_refunded: refunded })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/check-in");
+  return { error: null };
+}
+
+export async function setOverageFee(id: string, amount: number) {
+  const supabase = await createClient();
+  const { error: authError } = await requireEditAccess(supabase);
+
+  if (authError) return { error: authError };
+
+  const { error } = await supabase
+    .from("bookings")
+    .update({ overage_fee: amount })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/check-in");
+  return { error: null };
+}

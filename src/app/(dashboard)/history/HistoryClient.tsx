@@ -12,6 +12,7 @@ import {
 import CustomerHistoryModal, {
   type CustomerIdentity,
 } from "./CustomerHistoryModal";
+import ExportExcelButton from "@/components/ExportExcelButton";
 
 type Location = Database["public"]["Tables"]["locations"]["Row"];
 
@@ -190,6 +191,23 @@ export default function HistoryClient({ locations }: { locations: Location[] }) 
             </div>
           </div>
 
+          <div className="flex justify-end">
+            <ExportExcelButton
+              filename="lich-su-dat-cho"
+              sheetName="Lịch sử"
+              rows={rows.map((r) => ({
+                "Ngày giờ": formatDateTime(r.start_time),
+                "Vị trí": r.location_name,
+                "Khách hàng": r.customer_name,
+                "Đối tượng": r.org_type === "công ty/tổ chức" ? "Công ty/Tổ chức" : "Cá nhân",
+                "Công ty/Tổ chức": r.organization_name ?? "",
+                SĐT: r.phone ?? "",
+                "Trạng thái": STATUS_LABEL[r.status],
+                "Giá cuối": r.final_price,
+              }))}
+            />
+          </div>
+
           <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
             <table className="w-full text-left text-sm">
               <thead className="bg-brand-cream text-brand-forest/70">
@@ -280,7 +298,20 @@ export default function HistoryClient({ locations }: { locations: Location[] }) 
       )}
 
       {tab === "repeat" && (
-        <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-end">
+            <ExportExcelButton
+              filename="khach-dat-lai"
+              sheetName="Khách đặt lại"
+              rows={repeatCustomers.map((c) => ({
+                "Khách hàng": c.name,
+                SĐT: c.phone,
+                "Số lần đặt": c.visitCount,
+                "Lần gần nhất": formatDateTime(c.lastVisit),
+              }))}
+            />
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
           <table className="w-full text-left text-sm">
             <thead className="bg-brand-cream text-brand-forest/70">
               <tr>
@@ -333,6 +364,7 @@ export default function HistoryClient({ locations }: { locations: Location[] }) 
           {repeatLoading && (
             <p className="p-4 text-center text-sm text-brand-forest/50">Đang tải...</p>
           )}
+          </div>
         </div>
       )}
 

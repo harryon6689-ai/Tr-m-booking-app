@@ -11,6 +11,7 @@ import {
   type StaffAccountInput,
 } from "@/lib/actions/staff";
 import { PERMISSION_MODULES, DEFAULT_STAFF_PERMISSIONS } from "@/lib/permissions";
+import ExportExcelButton from "@/components/ExportExcelButton";
 
 type StaffAccount = Database["public"]["Tables"]["users"]["Row"];
 
@@ -99,12 +100,25 @@ export default function StaffClient({
 
   return (
     <div className="flex flex-col gap-4">
-      <button
-        onClick={openCreate}
-        className="w-fit rounded-lg bg-brand-forest px-4 py-2 font-bold text-brand-cream hover:bg-brand-forest/90"
-      >
-        + Tạo tài khoản nhân viên
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button
+          onClick={openCreate}
+          className="w-fit rounded-lg bg-brand-forest px-4 py-2 font-bold text-brand-cream hover:bg-brand-forest/90"
+        >
+          + Tạo tài khoản nhân viên
+        </button>
+        <ExportExcelButton
+          filename="danh-sach-nhan-vien"
+          sheetName="Nhân viên"
+          rows={accounts.map((a) => ({
+            Tên: a.name,
+            "Số điện thoại": a.phone ?? "",
+            "Vai trò": a.role === "admin" ? "Quản lý" : "Nhân viên",
+            Quyền: permissionSummary(a.role, a.permissions, a.view_only),
+            "Trạng thái": a.active ? "Đang hoạt động" : "Đã khóa",
+          }))}
+        />
+      </div>
 
       <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
         <table className="w-full text-left text-sm">

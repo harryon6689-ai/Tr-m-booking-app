@@ -9,11 +9,13 @@ import {
   cancelKolBooking,
   setKolReviewed,
   setKolEffectivenessRating,
+  setKolStatus,
   type KolBookingInput,
   type ReviewStatusFilter,
   type EffectiveFilter,
 } from "@/lib/actions/kol-bookings";
 import CurrencyInput from "@/components/CurrencyInput";
+import ExportExcelButton from "@/components/ExportExcelButton";
 
 type KolBooking = Database["public"]["Tables"]["kol_bookings"]["Row"] & {
   created_by_name: string | null;
@@ -154,11 +156,40 @@ export default function KolClient({
     setMode("form");
   }
 
-  async function handleSetReviewed(b: KolBooking, hasReviewed: boolean) {
+  async function handleSetReviewStatus(
+    b: KolBooking,
+    value: "not_reviewed" | "reviewed" | "cancelled"
+  ) {
+    if (value === "cancelled") {
+      const result = await setKolStatus(b.id, "hủy");
+      if (result.error) {
+        alert(result.error);
+        return;
+      }
+      refetch();
+      return;
+    }
+
+    const hasReviewed = value === "reviewed";
     const result = await setKolReviewed(b.id, hasReviewed);
     if (result.error) {
       alert(result.error);
       return;
+    }
+    if (hasReviewed && b.status !== "đã tới") {
+      // Marking a KOL as reviewed implies they actually showed up.
+      const statusResult = await setKolStatus(b.id, "đã tới");
+      if (statusResult.error) {
+        alert(statusResult.error);
+        return;
+      }
+    } else if (!hasReviewed && b.status === "hủy") {
+      // Picking this KOL back out of "Hủy" reverts to the default active state.
+      const statusResult = await setKolStatus(b.id, "đã đặt");
+      if (statusResult.error) {
+        alert(statusResult.error);
+        return;
+      }
     }
     refetch();
   }
@@ -270,6 +301,27 @@ export default function KolClient({
         />
       </div>
 
+      <div className="flex justify-end">
+        <ExportExcelButton
+          filename="lich-kol-review"
+          sheetName="KOL"
+          rows={bookings.map((b) => ({
+            KOL: b.kol_name,
+            SĐT: b.phone ?? "",
+            "Nền tảng": b.platform ?? "",
+            "Follower": b.follower_count ?? "",
+            "Ngày ghé thăm": b.visit_date,
+            Giờ: b.start_time ? `${b.start_time.slice(0, 5)} - ${b.end_time?.slice(0, 5) ?? ""}` : "",
+            "Loại hợp tác": b.deal_type ?? "",
+            "Giá review": b.review_price,
+            "Đã review": b.has_reviewed ? "Có" : "Chưa",
+            "Đánh giá": b.effectiveness_rating,
+            "Trạng thái": STATUS_LABEL[b.status],
+            "Người book": b.booked_by_name ?? "",
+          }))}
+        />
+      </div>
+
       <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
         <table className="w-full text-left text-sm">
           <thead className="bg-brand-cream text-brand-forest/70">
@@ -278,9 +330,8 @@ export default function KolClient({
               <th className="px-3 py-2 font-semibold">Ngày giờ</th>
               <th className="px-3 py-2 font-semibold">Giá &amp; Quà tặng</th>
               <th className="px-3 py-2 font-semibold">Video đã đăng</th>
+              <th className="px-3 py-2 font-semibold">Trạng Thái</th>
               <th className="px-3 py-2 font-semibold">Đánh giá</th>
-              <th className="px-3 py-2 font-semibold">Review</th>
-              <th className="px-3 py-2 font-semibold">Trạng thái</th>
               <th className="px-3 py-2 font-semibold">Người Book KOL</th>
             </tr>
           </thead>
@@ -350,19 +401,31 @@ export default function KolClient({
                 </td>
                 <td className="px-3 py-2">
                   <select
-                    value={b.has_reviewed ? "reviewed" : "not_reviewed"}
+                    value={
+                      b.status === "hủy"
+                        ? "cancelled"
+                        : b.has_reviewed
+                        ? "reviewed"
+                        : "not_reviewed"
+                    }
                     onChange={(e) =>
-                      handleSetReviewed(b, e.target.value === "reviewed")
+                      handleSetReviewStatus(
+                        b,
+                        e.target.value as "not_reviewed" | "reviewed" | "cancelled"
+                      )
                     }
                     disabled={!canEdit}
                     className={`rounded-full border-none px-2 py-1 text-xs font-bold outline-none disabled:opacity-70 ${
-                      b.has_reviewed
+                      b.status === "hủy"
+                        ? "bg-red-100 text-red-600"
+                        : b.has_reviewed
                         ? "bg-brand-forest text-white"
                         : "bg-brand-amber text-white"
                     }`}
                   >
                     <option value="not_reviewed">Chưa review</option>
                     <option value="reviewed">Đã review</option>
+                    <option value="cancelled">Hủy</option>
                   </select>
                 </td>
                 <td className="px-3 py-2">
@@ -372,17 +435,6 @@ export default function KolClient({
                     size="text-sm"
                     disabled={!canEdit}
                   />
-                </td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      b.status === "hủy"
-                        ? "bg-gray-200 text-gray-600"
-                        : "bg-brand-amber/20 text-brand-amber"
-                    }`}
-                  >
-                    {STATUS_LABEL[b.status]}
-                  </span>
                 </td>
                 <td className="px-3 py-2 text-brand-forest/80">
                   {b.booked_by_name || "-"}

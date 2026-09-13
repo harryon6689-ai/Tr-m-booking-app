@@ -14,6 +14,7 @@ import {
   deletePreferredCustomer,
   type PreferredCustomerInput,
 } from "@/lib/actions/preferred-customers";
+import ExportExcelButton from "@/components/ExportExcelButton";
 
 type PreferredCustomer = Database["public"]["Tables"]["preferred_customers"]["Row"];
 
@@ -65,14 +66,34 @@ export default function PreferredCustomersClient({
 
   return (
     <div className="flex flex-col gap-4">
-      {isAdmin && (
-        <button
-          onClick={openCreate}
-          className="w-fit rounded-lg bg-brand-forest px-4 py-2 font-bold text-brand-cream hover:bg-brand-forest/90"
-        >
-          + Thêm khách VIP/KOL
-        </button>
-      )}
+      <div className="flex items-center justify-between gap-3">
+        {isAdmin ? (
+          <button
+            onClick={openCreate}
+            className="w-fit rounded-lg bg-brand-forest px-4 py-2 font-bold text-brand-cream hover:bg-brand-forest/90"
+          >
+            + Thêm khách VIP/KOL
+          </button>
+        ) : (
+          <span />
+        )}
+        <ExportExcelButton
+          filename="khach-vip-kol"
+          sheetName="Khách VIP-KOL"
+          rows={preferredCustomers.map((c) => ({
+            "Tên khách": c.name,
+            SĐT: c.phone ?? "",
+            Loại: c.customer_type,
+            "Đối tượng":
+              c.org_type === "công ty/tổ chức"
+                ? c.organization_name || "Công ty/Tổ chức"
+                : "Cá nhân",
+            "% giảm giá riêng":
+              c.custom_discount_percent != null ? `${c.custom_discount_percent}%` : "Mặc định",
+            "Trạng thái": c.active ? "Đang áp dụng" : "Tạm ngưng",
+          }))}
+        />
+      </div>
 
       <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
         <table className="w-full text-left text-sm">

@@ -1,7 +1,13 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import type { BookingStatus, CustomerOrgType } from "@/lib/types/database";
+import type {
+  BookingStatus,
+  CustomerOrgType,
+  Database,
+  RecurrenceType,
+} from "@/lib/types/database";
+import { matchesFixedSchedule, ymd } from "@/lib/fixed-customers-utils";
 
 export type CustomerCategory = CustomerOrgType | "khách cố định";
 
@@ -127,6 +133,144 @@ export async function getCustomerBookingHistory(
     };
     return { ...rest, location_name: locations?.name ?? "?" };
   });
+}
+
+export interface CheckinFilters {
+  dateFrom?: string; // yyyy-mm-dd, defaults to today
+  dateTo?: string; // yyyy-mm-dd, defaults to today
+  query?: string;
+}
+
+export type CheckinRow = Database["public"]["Tables"]["bookings"]["Row"] & {
+  location_name: string;
+  is_fixed_customer: boolean;
+  recurrence_type: RecurrenceType | null;
+  fixed_customer_id: string | null;
+  occurrence_date: string | null;
+};
+
+/**
+ * Bookings + matching "khách cố định" (fixed customer) occurrences for a given
+ * day/range, soonest first, for front-desk check-in. Cancelled bookings are
+ * included (shown with a status badge); fixed-customer rows are synthesized
+ * (no real booking id) and tagged via `is_fixed_customer`/`recurrence_type`.
+ */
+export async function getCheckinList(
+  filters: CheckinFilters = {}
+): Promise<CheckinRow[]> {
+  const supabase = await createClient();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dateFrom = filters.dateFrom || today;
+  const dateTo = filters.dateTo || today;
+
+  let bookingQuery = supabase
+    .from("bookings")
+    .select("*, locations(name)")
+    .gte("start_time", new Date(`${dateFrom}T00:00:00`).toISOString())
+    .lte("start_time", new Date(`${dateTo}T23:59:59.999`).toISOString())
+    .order("start_time", { ascending: true })
+    .limit(500);
+
+  if (filters.query) {
+    const q = filters.query.replace(/[%,]/g, "");
+    bookingQuery = bookingQuery.or(`customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
+  }
+
+  const { data: bookingsData, error: bookingsError } = await bookingQuery;
+  if (bookingsError) throw bookingsError;
+
+  const bookingRows: CheckinRow[] = (bookingsData ?? []).map((row) => {
+    const { locations, ...rest } = row as typeof row & {
+      locations: { name: string } | null;
+    };
+    return {
+      ...rest,
+      location_name: locations?.name ?? "?",
+      is_fixed_customer: false,
+      recurrence_type: null,
+      fixed_customer_id: null,
+      occurrence_date: null,
+    };
+  });
+
+  let fixedQuery = supabase
+    .from("fixed_customers")
+    .select("*, locations(name)")
+    .eq("active", true)
+    .lte("effective_from", dateTo)
+    .or(`effective_until.is.null,effective_until.gte.${dateFrom}`);
+
+  if (filters.query) {
+    const q = filters.query.replace(/[%,]/g, "");
+    fixedQuery = fixedQuery.or(`customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
+  }
+
+  const { data: fixedData, error: fixedError } = await fixedQuery;
+  if (fixedError) throw fixedError;
+
+  const { data: checkinsData, error: checkinsError } = await supabase
+    .from("fixed_customer_checkins")
+    .select("fixed_customer_id, occurrence_date, arrived")
+    .gte("occurrence_date", dateFrom)
+    .lte("occurrence_date", dateTo);
+  if (checkinsError) throw checkinsError;
+
+  const arrivedMap = new Map<string, boolean>();
+  for (const row of checkinsData ?? []) {
+    arrivedMap.set(`${row.fixed_customer_id}|${row.occurrence_date}`, row.arrived);
+  }
+
+  const fixedRows: CheckinRow[] = [];
+  const rangeStart = new Date(`${dateFrom}T00:00:00`);
+  const rangeEnd = new Date(`${dateTo}T00:00:00`);
+
+  for (const row of fixedData ?? []) {
+    const { locations, ...rule } = row as typeof row & {
+      locations: { name: string } | null;
+    };
+    const cursor = new Date(rangeStart);
+    while (cursor <= rangeEnd) {
+      if (matchesFixedSchedule(rule, cursor)) {
+        const dateStr = ymd(cursor);
+        const arrived = arrivedMap.get(`${rule.id}|${dateStr}`) ?? false;
+        fixedRows.push({
+          id: `fc-${rule.id}-${dateStr}`,
+          location_id: rule.location_id,
+          location_name: locations?.name ?? "?",
+          customer_name: rule.customer_name,
+          phone: rule.phone,
+          start_time: new Date(`${dateStr}T${rule.start_time}`).toISOString(),
+          end_time: new Date(`${dateStr}T${rule.end_time}`).toISOString(),
+          status: arrived ? "đã tới" : "đã đặt",
+          deposit_amount: 0,
+          discount_applied: 0,
+          final_price: 0,
+          note: rule.note,
+          org_type: "cá nhân",
+          organization_name: null,
+          attendee_count: null,
+          equipment_needed: [],
+          equipment_note: null,
+          pricing_rule_id: null,
+          deposit_refunded: false,
+          overage_fee: 0,
+          created_by: rule.created_by,
+          created_at: rule.created_at,
+          updated_at: rule.updated_at,
+          is_fixed_customer: true,
+          recurrence_type: rule.recurrence_type,
+          fixed_customer_id: rule.id,
+          occurrence_date: dateStr,
+        });
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+
+  return [...bookingRows, ...fixedRows].sort((a, b) =>
+    a.start_time.localeCompare(b.start_time)
+  );
 }
 
 export interface RepeatCustomer {

@@ -15,6 +15,8 @@ function parseNumber(s: string) {
 interface CurrencyInputProps {
   value: number;
   onChange: (value: number) => void;
+  onBlur?: () => void;
+  disabled?: boolean;
   className?: string;
   id?: string;
 }
@@ -22,6 +24,8 @@ interface CurrencyInputProps {
 export default function CurrencyInput({
   value,
   onChange,
+  onBlur,
+  disabled,
   className,
   id,
 }: CurrencyInputProps) {
@@ -39,11 +43,13 @@ export default function CurrencyInput({
       type="text"
       inputMode="numeric"
       value={display}
+      disabled={disabled}
       onChange={(e) => {
         const parsed = parseNumber(e.target.value);
         setDisplay(formatNumber(parsed));
         onChange(parsed);
       }}
+      onBlur={onBlur}
       className={className}
     />
   );

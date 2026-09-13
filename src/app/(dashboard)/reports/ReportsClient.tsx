@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getRevenueSummary, type RevenueSummary } from "@/lib/actions/reports";
+import { exportMultiSheetExcel } from "@/lib/export-excel";
 
 function formatMoney(n: number) {
   return n.toLocaleString("vi-VN") + "đ";
@@ -47,6 +48,39 @@ export default function ReportsClient({
 
   const maxDayRevenue = Math.max(1, ...summary.byDay.map((d) => d.revenue));
 
+  function handleExport() {
+    exportMultiSheetExcel(`bao-cao-doanh-thu_${dateFrom}_${dateTo}`, [
+      {
+        name: "Tổng quan",
+        rows: [
+          {
+            "Từ ngày": dateFrom,
+            "Đến ngày": dateTo,
+            "Tổng doanh thu": summary.totalRevenue,
+            "Tổng tiền cọc": summary.totalDeposit,
+            "Số lượt đặt": summary.bookingCount,
+            "Số lượt hủy": summary.cancelledCount,
+          },
+        ],
+      },
+      {
+        name: "Theo vị trí",
+        rows: summary.byLocation.map((l) => ({
+          "Vị trí": l.location_name,
+          "Lượt đặt": l.count,
+          "Doanh thu": l.revenue,
+        })),
+      },
+      {
+        name: "Theo ngày",
+        rows: summary.byDay.map((d) => ({
+          Ngày: d.date,
+          "Doanh thu": d.revenue,
+        })),
+      },
+    ]);
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-brand-forest/15 bg-white p-4">
@@ -69,6 +103,13 @@ export default function ReportsClient({
           />
         </div>
         {loading && <span className="text-xs text-brand-forest/50">Đang tải...</span>}
+        <button
+          type="button"
+          onClick={handleExport}
+          className="ml-auto rounded-lg border border-brand-forest/30 px-3 py-1.5 text-sm font-semibold text-brand-forest hover:bg-brand-cream"
+        >
+          Xuất file
+        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
