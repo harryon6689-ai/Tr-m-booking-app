@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getCheckinList,
@@ -173,8 +173,12 @@ export default function CheckInClient({
     setLoading(false);
   }, [dateFrom, dateTo, query]);
 
+  const isFirstRender = useRef(true);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch on filter change
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     refetch();
   }, [refetch]);
 
@@ -456,15 +460,15 @@ export default function CheckInClient({
         <table className="w-full text-left text-sm">
           <thead className="bg-brand-cream text-brand-forest/70">
             <tr>
-              <th className="px-3 py-2 font-semibold">Giờ</th>
-              <th className="px-3 py-2 font-semibold">Vị trí</th>
-              <th className="px-3 py-2 font-semibold">Khách hàng</th>
-              <th className="px-3 py-2 font-semibold">SĐT</th>
-              <th className="px-3 py-2 text-center font-semibold">Đối tượng</th>
-              <th className="px-3 py-2 text-center font-semibold">Số người</th>
-              <th className="px-3 py-2 text-center font-semibold">Đặt cọc</th>
-              <th className="px-3 py-2 font-semibold">Ghi chú</th>
-              <th className="px-3 py-2 text-center font-semibold">Trạng thái</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Giờ</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Khách hàng</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">SĐT</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Đối tượng</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Số người</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Đặt cọc</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Ghi chú</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Trạng thái</th>
             </tr>
           </thead>
           <tbody>

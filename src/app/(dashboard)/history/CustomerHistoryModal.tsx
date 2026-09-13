@@ -112,10 +112,10 @@ export default function CustomerHistoryModal({
           <table className="w-full text-left text-sm">
             <thead className="bg-brand-cream text-brand-forest/70">
               <tr>
-                <th className="px-3 py-2 font-semibold">Ngày giờ</th>
-                <th className="px-3 py-2 font-semibold">Vị trí</th>
-                <th className="px-3 py-2 font-semibold">Trạng thái</th>
-                <th className="px-3 py-2 font-semibold">Giá cuối</th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold">Ngày giờ</th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold">Giá cuối</th>
               </tr>
             </thead>
             <tbody>

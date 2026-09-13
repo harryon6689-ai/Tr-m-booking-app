@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Database, BookingStatus } from "@/lib/types/database";
 import {
   searchBookingHistory,
-  getRepeatCustomerStats,
   type HistoryRow,
   type RepeatCustomer,
   type CustomerCategory,
@@ -36,7 +35,15 @@ function formatDateTime(iso: string) {
   });
 }
 
-export default function HistoryClient({ locations }: { locations: Location[] }) {
+export default function HistoryClient({
+  locations,
+  initialRows,
+  initialRepeatCustomers,
+}: {
+  locations: Location[];
+  initialRows: HistoryRow[];
+  initialRepeatCustomers: RepeatCustomer[];
+}) {
   const [tab, setTab] = useState<"history" | "repeat">("history");
 
   const [locationId, setLocationId] = useState("");
@@ -47,11 +54,11 @@ export default function HistoryClient({ locations }: { locations: Location[] }) 
   const [rawQuery, setRawQuery] = useState("");
   const [query, setQuery] = useState("");
 
-  const [rows, setRows] = useState<HistoryRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<HistoryRow[]>(initialRows);
+  const [loading, setLoading] = useState(false);
 
-  const [repeatCustomers, setRepeatCustomers] = useState<RepeatCustomer[]>([]);
-  const [repeatLoading, setRepeatLoading] = useState(true);
+  const [repeatCustomers] = useState<RepeatCustomer[]>(initialRepeatCustomers);
+  const [repeatLoading] = useState(false);
 
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerIdentity | null>(
     null
@@ -75,21 +82,14 @@ export default function HistoryClient({ locations }: { locations: Location[] }) 
     setLoading(false);
   }, [locationId, status, customerCategory, dateFrom, dateTo, query]);
 
+  const isFirstHistoryRender = useRef(true);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch on filter change
+    if (isFirstHistoryRender.current) {
+      isFirstHistoryRender.current = false;
+      return;
+    }
     refetch();
   }, [refetch]);
-
-  const refetchRepeat = useCallback(async () => {
-    const data = await getRepeatCustomerStats();
-    setRepeatCustomers(data);
-    setRepeatLoading(false);
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch on mount
-    refetchRepeat();
-  }, [refetchRepeat]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -212,14 +212,14 @@ export default function HistoryClient({ locations }: { locations: Location[] }) 
             <table className="w-full text-left text-sm">
               <thead className="bg-brand-cream text-brand-forest/70">
                 <tr>
-                  <th className="px-3 py-2 font-semibold">Ngày giờ</th>
-                  <th className="px-3 py-2 font-semibold">Vị trí</th>
-                  <th className="px-3 py-2 font-semibold">Khách hàng</th>
-                  <th className="px-3 py-2 font-semibold">Đối tượng</th>
-                  <th className="px-3 py-2 font-semibold">Công ty/Tổ chức</th>
-                  <th className="px-3 py-2 font-semibold">SĐT</th>
-                  <th className="px-3 py-2 font-semibold">Trạng thái</th>
-                  <th className="px-3 py-2 font-semibold">Giá cuối</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-semibold">Ngày giờ</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-semibold">Khách hàng</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-semibold">Đối tượng</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-semibold">Công ty/Tổ chức</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-semibold">SĐT</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-semibold">Giá cuối</th>
                 </tr>
               </thead>
               <tbody>
@@ -315,10 +315,10 @@ export default function HistoryClient({ locations }: { locations: Location[] }) 
           <table className="w-full text-left text-sm">
             <thead className="bg-brand-cream text-brand-forest/70">
               <tr>
-                <th className="px-3 py-2 font-semibold">Khách hàng</th>
-                <th className="px-3 py-2 font-semibold">SĐT</th>
-                <th className="px-3 py-2 font-semibold">Số lần đặt</th>
-                <th className="px-3 py-2 font-semibold">Lần gần nhất</th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold">Khách hàng</th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold">SĐT</th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold">Số lần đặt</th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold">Lần gần nhất</th>
               </tr>
             </thead>
             <tbody>

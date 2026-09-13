@@ -127,9 +127,9 @@ export default function ReportsClient({
           <table className="w-full text-left text-sm">
             <thead className="text-brand-forest/60">
               <tr>
-                <th className="pb-2 font-medium">Vị trí</th>
-                <th className="pb-2 font-medium">Lượt đặt</th>
-                <th className="pb-2 font-medium">Doanh thu</th>
+                <th className="whitespace-nowrap pb-2 font-medium">Vị trí</th>
+                <th className="whitespace-nowrap pb-2 font-medium">Lượt đặt</th>
+                <th className="whitespace-nowrap pb-2 font-medium">Doanh thu</th>
               </tr>
             </thead>
             <tbody>

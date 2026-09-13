@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,6 +30,13 @@ const links = [
 export default function Nav({ name, role, permissions }: NavProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [lastPathname, setLastPathname] = useState(pathname);
+
+  if (pathname !== lastPathname) {
+    setLastPathname(pathname);
+    setMenuOpen(false);
+  }
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -86,14 +94,31 @@ export default function Nav({ name, role, permissions }: NavProps) {
           </span>
           <button
             onClick={handleSignOut}
-            className="rounded-lg border border-brand-cream/40 px-3 py-1 font-semibold text-brand-cream transition hover:bg-white/10"
+            className="hidden rounded-lg border border-brand-cream/40 px-3 py-1 font-semibold text-brand-cream transition hover:bg-white/10 md:block"
           >
             Đăng xuất
+          </button>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="Mở menu"
+            aria-expanded={menuOpen}
+            className="flex h-9 w-9 flex-col items-center justify-center gap-1.5 rounded-lg border border-brand-cream/40 text-brand-cream md:hidden"
+          >
+            <span
+              className={`h-0.5 w-5 bg-current transition ${menuOpen ? "translate-y-2 rotate-45" : ""}`}
+            />
+            <span
+              className={`h-0.5 w-5 bg-current transition ${menuOpen ? "opacity-0" : ""}`}
+            />
+            <span
+              className={`h-0.5 w-5 bg-current transition ${menuOpen ? "-translate-y-2 -rotate-45" : ""}`}
+            />
           </button>
         </div>
       </div>
 
-      <nav className="border-t border-brand-cream/10">
+      <nav className="hidden border-t border-brand-cream/10 md:block">
         <div className="mx-auto flex max-w-6xl flex-wrap gap-1 px-4 py-1">
           {visibleLinks.map((link) => {
             const active = pathname === link.href;
@@ -113,6 +138,44 @@ export default function Nav({ name, role, permissions }: NavProps) {
           })}
         </div>
       </nav>
+
+      {menuOpen && (
+        <nav className="border-t border-brand-cream/10 md:hidden">
+          <div className="flex flex-col gap-1 px-4 py-2">
+            <span className="px-1 py-1 text-xs font-semibold text-brand-cream/70">
+              {name} · {role === "admin" ? "Quản lý" : "Nhân viên"}
+            </span>
+            {visibleLinks.map((link) => {
+              const active = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`rounded-lg px-3 py-2 text-sm font-bold transition ${
+                    active
+                      ? "bg-brand-cream text-brand-forest"
+                      : "text-brand-cream hover:bg-white/10"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+            <a
+              href="tel:0966468978"
+              className="rounded-lg px-3 py-2 text-sm font-bold text-brand-cream hover:bg-white/10"
+            >
+              Hotline: 0966 468 978
+            </a>
+            <button
+              onClick={handleSignOut}
+              className="mt-1 rounded-lg border border-brand-cream/40 px-3 py-2 text-left text-sm font-bold text-brand-cream hover:bg-white/10"
+            >
+              Đăng xuất
+            </button>
+          </div>
+        </nav>
+      )}
     </header>
   );
 }

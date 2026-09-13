@@ -108,11 +108,11 @@ function DiscountPercentTable({
       <table className="w-full text-left text-sm">
         <thead className="bg-brand-cream text-brand-forest/70">
           <tr>
-            <th className="px-3 py-2 font-semibold">Loại khách</th>
-            <th className="px-3 py-2 font-semibold">Áp dụng cho</th>
-            <th className="px-3 py-2 font-semibold">% mặc định</th>
-            <th className="px-3 py-2 font-semibold">Đang áp dụng</th>
-            {isAdmin && <th className="px-3 py-2 font-semibold"></th>}
+            <th className="whitespace-nowrap px-3 py-2 font-semibold">Loại khách</th>
+            <th className="whitespace-nowrap px-3 py-2 font-semibold">Áp dụng cho</th>
+            <th className="whitespace-nowrap px-3 py-2 font-semibold">% mặc định</th>
+            <th className="whitespace-nowrap px-3 py-2 font-semibold">Đang áp dụng</th>
+            {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
           </tr>
         </thead>
         <tbody>
@@ -250,13 +250,13 @@ function PricingRulesPanel({
         <table className="w-full text-left text-sm">
           <thead className="bg-brand-cream text-brand-forest/70">
             <tr>
-              <th className="px-3 py-2 font-semibold">Vị trí</th>
-              <th className="px-3 py-2 font-semibold">Chính sách</th>
-              <th className="px-3 py-2 font-semibold">Số người</th>
-              <th className="px-3 py-2 font-semibold">Giá</th>
-              <th className="px-3 py-2 font-semibold">Đồ uống</th>
-              <th className="px-3 py-2 font-semibold">Trạng thái</th>
-              {isAdmin && <th className="px-3 py-2 font-semibold"></th>}
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Chính sách</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Số người</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Giá</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Đồ uống</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
+              {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
             </tr>
           </thead>
           <tbody>

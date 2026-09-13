@@ -99,13 +99,13 @@ export default function PreferredCustomersClient({
         <table className="w-full text-left text-sm">
           <thead className="bg-brand-cream text-brand-forest/70">
             <tr>
-              <th className="px-3 py-2 font-semibold">Tên khách</th>
-              <th className="px-3 py-2 font-semibold">SĐT</th>
-              <th className="px-3 py-2 font-semibold">Loại</th>
-              <th className="px-3 py-2 font-semibold">Đối tượng</th>
-              <th className="px-3 py-2 font-semibold">% giảm giá riêng</th>
-              <th className="px-3 py-2 font-semibold">Trạng thái</th>
-              {isAdmin && <th className="px-3 py-2 font-semibold"></th>}
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Tên khách</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">SĐT</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Loại</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Đối tượng</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">% giảm giá riêng</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
+              {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
             </tr>
           </thead>
           <tbody>

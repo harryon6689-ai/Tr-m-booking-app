@@ -229,14 +229,14 @@ export default function FixedCustomersClient({
         <table className="w-full text-left text-sm">
           <thead className="bg-brand-cream text-brand-forest/70">
             <tr>
-              <th className="px-3 py-2 font-semibold">Vị trí</th>
-              <th className="px-3 py-2 font-semibold">Khách hàng</th>
-              <th className="px-3 py-2 font-semibold">Lặp lại</th>
-              <th className="px-3 py-2 font-semibold">Giờ</th>
-              <th className="px-3 py-2 font-semibold">Hiệu lực</th>
-              <th className="px-3 py-2 font-semibold">Tiền cọc</th>
-              <th className="px-3 py-2 font-semibold">Trạng thái</th>
-              {isAdmin && <th className="px-3 py-2 font-semibold"></th>}
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Khách hàng</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Lặp lại</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Giờ</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Hiệu lực</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Tiền cọc</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
+              {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
             </tr>
           </thead>
           <tbody>

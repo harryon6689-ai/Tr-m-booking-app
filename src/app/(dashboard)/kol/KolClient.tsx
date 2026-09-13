@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BookingStatus, Database } from "@/lib/types/database";
 import {
   getKolBookings,
@@ -144,8 +144,12 @@ export default function KolClient({
     setLoading(false);
   }, [dateFrom, dateTo, query, reviewStatus, effectiveFilter]);
 
+  const isFirstRender = useRef(true);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch on filter change
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     refetch();
   }, [refetch]);
 
@@ -351,14 +355,14 @@ export default function KolClient({
         <table className="w-full text-left text-sm">
           <thead className="bg-brand-cream text-brand-forest/70">
             <tr>
-              <th className="px-3 py-2 font-semibold">KOL</th>
-              <th className="px-3 py-2 font-semibold">Ngày giờ</th>
-              <th className="px-3 py-2 font-semibold">Giá &amp; Quà tặng</th>
-              <th className="px-3 py-2 font-semibold">Video đã đăng</th>
-              <th className="px-3 py-2 font-semibold">Trạng Thái</th>
-              <th className="px-3 py-2 font-semibold">Đánh giá</th>
-              <th className="px-3 py-2 font-semibold">Người Book KOL</th>
-              {canEdit && <th className="px-3 py-2 font-semibold"></th>}
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">KOL</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Ngày giờ</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Giá &amp; Quà tặng</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Video đã đăng</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng Thái</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Đánh giá</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Người Book KOL</th>
+              {canEdit && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
             </tr>
           </thead>
           <tbody>
@@ -704,7 +708,7 @@ function KolForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Ngày ghé thăm

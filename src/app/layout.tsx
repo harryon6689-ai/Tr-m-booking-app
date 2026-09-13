@@ -15,7 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "TRẠM COWORKING SPACE — Quản lý đặt chỗ",
   description: "Hệ thống quản lý đặt chỗ TRẠM COWORKING SPACE",
-  icons: { icon: "/LOGO.jpg" },
+  appleWebApp: {
+    title: "TRẠM",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

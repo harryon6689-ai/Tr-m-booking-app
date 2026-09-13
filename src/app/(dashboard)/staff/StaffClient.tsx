@@ -124,12 +124,12 @@ export default function StaffClient({
         <table className="w-full text-left text-sm">
           <thead className="bg-brand-cream text-brand-forest/70">
             <tr>
-              <th className="px-3 py-2 font-semibold">Tên</th>
-              <th className="px-3 py-2 font-semibold">Số điện thoại</th>
-              <th className="px-3 py-2 font-semibold">Vai trò</th>
-              <th className="px-3 py-2 font-semibold">Quyền</th>
-              <th className="px-3 py-2 font-semibold">Trạng thái</th>
-              <th className="px-3 py-2 font-semibold"></th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Tên</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Số điện thoại</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Vai trò</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Quyền</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>
             </tr>
           </thead>
           <tbody>
