@@ -29,9 +29,8 @@ export interface KolBookingInput {
   note: string;
 }
 
-export type ReviewStatusFilter = "" | "reviewed" | "not_reviewed";
-export type EffectiveFilter = "" | "effective";
-const EFFECTIVE_THRESHOLD = 4;
+export type ReviewStatusFilter = "" | "reviewed" | "not_reviewed" | "cancelled";
+export type EffectiveFilter = "" | "1" | "2" | "3" | "4" | "5";
 
 export interface KolBookingFilters {
   dateFrom?: string;
@@ -57,8 +56,9 @@ export async function getKolBookings(filters: KolBookingFilters = {}) {
   }
   if (filters.reviewStatus === "reviewed") query = query.eq("has_reviewed", true);
   if (filters.reviewStatus === "not_reviewed") query = query.eq("has_reviewed", false);
-  if (filters.effectiveFilter === "effective") {
-    query = query.gte("effectiveness_rating", EFFECTIVE_THRESHOLD);
+  if (filters.reviewStatus === "cancelled") query = query.eq("status", "hủy");
+  if (filters.effectiveFilter) {
+    query = query.gte("effectiveness_rating", Number(filters.effectiveFilter));
   }
 
   const { data, error } = await query;
@@ -150,6 +150,20 @@ export async function setKolStatus(id: string, status: BookingStatus) {
     .from("kol_bookings")
     .update({ status, created_by: userId })
     .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/kol");
+  return { error: null };
+}
+
+export async function deleteKolBooking(id: string) {
+  const supabase = await createClient();
+  const { error: authError } = await requireEditAccess(supabase);
+
+  if (authError) return { error: authError };
+
+  const { error } = await supabase.from("kol_bookings").delete().eq("id", id);
 
   if (error) return { error: error.message };
 

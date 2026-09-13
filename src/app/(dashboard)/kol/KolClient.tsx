@@ -7,6 +7,7 @@ import {
   createKolBooking,
   updateKolBooking,
   cancelKolBooking,
+  deleteKolBooking,
   setKolReviewed,
   setKolEffectivenessRating,
   setKolStatus,
@@ -75,21 +76,23 @@ function SummaryCard({
   label,
   value,
   highlight,
+  tone = "forest",
 }: {
   label: string;
   value: string;
   highlight?: boolean;
+  tone?: "forest" | "red";
 }) {
+  const toneClass = highlight
+    ? "text-brand-amber"
+    : tone === "red"
+    ? "text-red-600"
+    : "text-brand-forest";
+
   return (
     <div className="rounded-xl border border-brand-forest/15 bg-white p-4">
       <p className="text-xs font-medium text-brand-forest/60">{label}</p>
-      <p
-        className={`mt-1 text-xl font-bold ${
-          highlight ? "text-brand-amber" : "text-brand-forest"
-        }`}
-      >
-        {value}
-      </p>
+      <p className={`mt-1 text-xl font-bold ${toneClass}`}>{value}</p>
     </div>
   );
 }
@@ -203,11 +206,25 @@ export default function KolClient({
     refetch();
   }
 
+  async function handleDelete(b: KolBooking) {
+    if (!confirm(`Xóa vĩnh viễn lịch KOL "${b.kol_name}"? Thao tác này không thể hoàn tác.`)) {
+      return;
+    }
+    const result = await deleteKolBooking(b.id);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    refetch();
+  }
+
   const activeBookings = bookings.filter((b) => b.status !== "hủy");
   const reviewedBookings = activeBookings.filter((b) => b.has_reviewed);
   const summary = {
     totalBooked: activeBookings.length,
     totalReviewed: reviewedBookings.length,
+    totalNotReviewed: activeBookings.length - reviewedBookings.length,
+    totalCancelled: bookings.length - activeBookings.length,
     reviewedCost: reviewedBookings.reduce((sum, b) => sum + b.review_price, 0),
   };
 
@@ -268,6 +285,7 @@ export default function KolClient({
             <option value="">Tất cả</option>
             <option value="reviewed">Đã review</option>
             <option value="not_reviewed">Chưa review</option>
+            <option value="cancelled">Hủy</option>
           </select>
         </div>
         <div className="flex flex-col gap-1">
@@ -278,47 +296,54 @@ export default function KolClient({
             className="rounded-lg border border-brand-forest/30 px-3 py-1.5 text-sm outline-none focus:border-brand-amber"
           >
             <option value="">Tất cả</option>
-            <option value="effective">Từ 4 sao trở lên</option>
+            <option value="1">Từ 1 sao trở lên</option>
+            <option value="2">Từ 2 sao trở lên</option>
+            <option value="3">Từ 3 sao trở lên</option>
+            <option value="4">Từ 4 sao trở lên</option>
+            <option value="5">5 sao</option>
           </select>
         </div>
-        {canEdit && (
-          <button
-            onClick={openCreate}
-            className="ml-auto rounded-lg bg-brand-forest px-4 py-2 font-bold text-brand-cream hover:bg-brand-forest/90"
-          >
-            + Tạo lịch KOL
-          </button>
-        )}
+        <div className="ml-auto flex items-end gap-2">
+          <ExportExcelButton
+            filename="lich-kol-review"
+            sheetName="KOL"
+            rows={bookings.map((b) => ({
+              KOL: b.kol_name,
+              SĐT: b.phone ?? "",
+              "Nền tảng": b.platform ?? "",
+              "Follower": b.follower_count ?? "",
+              "Ngày ghé thăm": b.visit_date,
+              Giờ: b.start_time
+                ? `${b.start_time.slice(0, 5)} - ${b.end_time?.slice(0, 5) ?? ""}`
+                : "",
+              "Loại hợp tác": b.deal_type ?? "",
+              "Giá review": b.review_price,
+              "Đã review": b.has_reviewed ? "Có" : "Chưa",
+              "Đánh giá": b.effectiveness_rating,
+              "Trạng thái": STATUS_LABEL[b.status],
+              "Người book": b.booked_by_name ?? "",
+            }))}
+          />
+          {canEdit && (
+            <button
+              onClick={openCreate}
+              className="rounded-lg bg-brand-forest px-4 py-2 font-bold text-brand-cream hover:bg-brand-forest/90"
+            >
+              + Tạo lịch KOL
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <SummaryCard label="Tổng KOL đã book" value={String(summary.totalBooked)} />
         <SummaryCard label="Đã review" value={String(summary.totalReviewed)} />
+        <SummaryCard label="Chưa review" value={String(summary.totalNotReviewed)} />
+        <SummaryCard label="Đã hủy" value={String(summary.totalCancelled)} tone="red" />
         <SummaryCard
           label="Chi phí đã review"
           value={formatMoney(summary.reviewedCost)}
           highlight
-        />
-      </div>
-
-      <div className="flex justify-end">
-        <ExportExcelButton
-          filename="lich-kol-review"
-          sheetName="KOL"
-          rows={bookings.map((b) => ({
-            KOL: b.kol_name,
-            SĐT: b.phone ?? "",
-            "Nền tảng": b.platform ?? "",
-            "Follower": b.follower_count ?? "",
-            "Ngày ghé thăm": b.visit_date,
-            Giờ: b.start_time ? `${b.start_time.slice(0, 5)} - ${b.end_time?.slice(0, 5) ?? ""}` : "",
-            "Loại hợp tác": b.deal_type ?? "",
-            "Giá review": b.review_price,
-            "Đã review": b.has_reviewed ? "Có" : "Chưa",
-            "Đánh giá": b.effectiveness_rating,
-            "Trạng thái": STATUS_LABEL[b.status],
-            "Người book": b.booked_by_name ?? "",
-          }))}
         />
       </div>
 
@@ -333,6 +358,7 @@ export default function KolClient({
               <th className="px-3 py-2 font-semibold">Trạng Thái</th>
               <th className="px-3 py-2 font-semibold">Đánh giá</th>
               <th className="px-3 py-2 font-semibold">Người Book KOL</th>
+              {canEdit && <th className="px-3 py-2 font-semibold"></th>}
             </tr>
           </thead>
           <tbody>
@@ -439,6 +465,16 @@ export default function KolClient({
                 <td className="px-3 py-2 text-brand-forest/80">
                   {b.booked_by_name || "-"}
                 </td>
+                {canEdit && (
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => handleDelete(b)}
+                      className="text-xs font-semibold text-red-600 hover:underline"
+                    >
+                      Xóa
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
