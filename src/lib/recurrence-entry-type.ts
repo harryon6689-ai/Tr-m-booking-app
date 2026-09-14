@@ -4,12 +4,14 @@ import { formatDayMonth } from "@/lib/fixed-customers-utils";
 
 export type EntryType = "single" | "weekly" | "monthly" | "quarterly" | "yearly";
 
+// Recurring entry types used to be admin-only; now any account with edit
+// access to the module (quick_booking/floor_map) can use them, same as admin.
 export const ENTRY_TYPE_OPTIONS: { value: EntryType; label: string; adminOnly: boolean }[] = [
   { value: "single", label: "Lẻ (theo ngày)", adminOnly: false },
-  { value: "weekly", label: "Định kỳ - Tuần", adminOnly: true },
-  { value: "monthly", label: "Định kỳ - Tháng", adminOnly: true },
-  { value: "quarterly", label: "Định kỳ - Quý", adminOnly: true },
-  { value: "yearly", label: "Định kỳ - Năm", adminOnly: true },
+  { value: "weekly", label: "Định kỳ - Tuần", adminOnly: false },
+  { value: "monthly", label: "Định kỳ - Tháng", adminOnly: false },
+  { value: "quarterly", label: "Định kỳ - Quý", adminOnly: false },
+  { value: "yearly", label: "Định kỳ - Năm", adminOnly: false },
 ];
 
 export function entryTypeLabel(entryType: EntryType): string {

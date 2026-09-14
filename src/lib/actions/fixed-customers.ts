@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireEditAccess } from "@/lib/actions/require-edit-access";
+import { expandFixedCustomerDates, ymd } from "@/lib/fixed-customers-utils";
 import type { RecurrenceType } from "@/lib/types/database";
 
 export interface FixedCustomerInput {
@@ -67,7 +69,8 @@ export async function getFixedCustomers() {
 }
 
 export async function createFixedCustomer(input: FixedCustomerInput) {
-  const { supabase, error: authError, userId } = await requireAdmin();
+  const supabase = await createClient();
+  const { userId, error: authError } = await requireEditAccess(supabase);
   if (authError) return { error: authError };
 
   const { error } = await supabase.from("fixed_customers").insert({
@@ -83,7 +86,8 @@ export async function createFixedCustomer(input: FixedCustomerInput) {
 }
 
 export async function updateFixedCustomer(id: string, input: FixedCustomerInput) {
-  const { supabase, error: authError, userId } = await requireAdmin();
+  const supabase = await createClient();
+  const { userId, error: authError } = await requireEditAccess(supabase);
   if (authError) return { error: authError };
 
   const { error } = await supabase
@@ -109,4 +113,41 @@ export async function deleteFixedCustomer(id: string) {
   revalidatePath("/fixed-customers");
   revalidatePath("/");
   return { error: null };
+}
+
+export interface FixedCustomerOccurrence {
+  date: string; // yyyy-mm-dd
+  arrived: boolean;
+}
+
+/** All occurrence dates (this year + next) for a rule, with check-in status. */
+export async function getFixedCustomerSchedule(
+  fixedCustomerId: string
+): Promise<FixedCustomerOccurrence[]> {
+  const supabase = await createClient();
+
+  const { data: rule, error: ruleError } = await supabase
+    .from("fixed_customers")
+    .select("*")
+    .eq("id", fixedCustomerId)
+    .single();
+  if (ruleError || !rule) return [];
+
+  const thisYear = new Date().getFullYear();
+  const dates = [
+    ...expandFixedCustomerDates(rule, thisYear),
+    ...expandFixedCustomerDates(rule, thisYear + 1),
+  ].sort((a, b) => a.getTime() - b.getTime());
+
+  const { data: checkins } = await supabase
+    .from("fixed_customer_checkins")
+    .select("occurrence_date, arrived")
+    .eq("fixed_customer_id", fixedCustomerId);
+
+  const arrivedMap = new Map((checkins ?? []).map((c) => [c.occurrence_date, c.arrived]));
+
+  return dates.map((d) => {
+    const dateStr = ymd(d);
+    return { date: dateStr, arrived: arrivedMap.get(dateStr) ?? false };
+  });
 }

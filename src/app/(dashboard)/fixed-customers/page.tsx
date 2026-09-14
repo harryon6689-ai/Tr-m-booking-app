@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getLocations } from "@/lib/data/locations";
 import { getFixedCustomers } from "@/lib/actions/fixed-customers";
 import { getCurrentUser } from "@/lib/data/current-user";
-import { hasModulePermission, firstPermittedPath } from "@/lib/permissions";
+import { hasModulePermission, firstPermittedPath, canEdit } from "@/lib/permissions";
 import FixedCustomersClient from "./FixedCustomersClient";
 
 export default async function FixedCustomersPage() {
@@ -28,6 +28,7 @@ export default async function FixedCustomersPage() {
         locations={locations}
         fixedCustomers={fixedCustomers}
         isAdmin={user.role === "admin"}
+        canEdit={canEdit(user.role, user.view_only)}
       />
     </div>
   );

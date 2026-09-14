@@ -7,10 +7,13 @@ import {
   createFixedCustomer,
   updateFixedCustomer,
   deleteFixedCustomer,
+  getFixedCustomerSchedule,
   type FixedCustomerInput,
+  type FixedCustomerOccurrence,
 } from "@/lib/actions/fixed-customers";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import CurrencyInput from "@/components/CurrencyInput";
+import ReviewRow from "@/components/ReviewRow";
 import WeekdayPicker, { WEEKDAY_LABELS } from "@/components/WeekdayPicker";
 import DayOfMonthPicker from "@/components/DayOfMonthPicker";
 import DateListPicker from "@/components/DateListPicker";
@@ -71,17 +74,20 @@ interface FixedCustomersClientProps {
   locations: Location[];
   fixedCustomers: FixedCustomer[];
   isAdmin: boolean;
+  canEdit: boolean;
 }
 
 export default function FixedCustomersClient({
   locations,
   fixedCustomers,
   isAdmin,
+  canEdit,
 }: FixedCustomersClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<"list" | "form">("list");
   const [editing, setEditing] = useState<FixedCustomer | null>(null);
+  const [viewing, setViewing] = useState<FixedCustomer | null>(null);
   const [recurrenceFilter, setRecurrenceFilter] = useState<RecurrenceFilter>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -183,7 +189,7 @@ export default function FixedCustomersClient({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        {isAdmin ? (
+        {canEdit ? (
           <button
             onClick={openCreate}
             className="w-fit rounded-lg bg-brand-forest px-4 py-2 font-bold text-brand-cream hover:bg-brand-forest/90"
@@ -279,7 +285,7 @@ export default function FixedCustomersClient({
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Hiệu lực</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Tiền cọc</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
-              {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
+              <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>
             </tr>
           </thead>
           <tbody>
@@ -322,7 +328,7 @@ export default function FixedCustomersClient({
                         <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
                           ⚠ Sắp hết hạn — nhắc gia hạn
                         </span>
-                        {isAdmin && (
+                        {canEdit && (
                           <button
                             type="button"
                             onClick={() => openRenew(rule)}
@@ -348,24 +354,32 @@ export default function FixedCustomersClient({
                       {rule.active ? "Đang áp dụng" : "Tạm ngưng"}
                     </span>
                   </td>
-                  {isAdmin && (
-                    <td className="px-3 py-2">
-                      <div className="flex gap-2">
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setViewing(rule)}
+                        className="text-xs font-semibold text-brand-forest hover:underline"
+                      >
+                        Xem
+                      </button>
+                      {canEdit && (
                         <button
                           onClick={() => openEdit(rule)}
                           className="text-xs font-semibold text-brand-forest hover:underline"
                         >
                           Sửa
                         </button>
+                      )}
+                      {isAdmin && (
                         <button
                           onClick={() => handleDelete(rule.id)}
                           className="text-xs font-semibold text-red-600 hover:underline"
                         >
                           Xóa
                         </button>
-                      </div>
-                    </td>
-                  )}
+                      )}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -378,6 +392,158 @@ export default function FixedCustomersClient({
               : "Không có khách cố định nào phù hợp với bộ lọc đang chọn."}
           </p>
         )}
+      </div>
+
+      {viewing && (
+        <FixedCustomerDetailView
+          rule={viewing}
+          locationName={locationName(viewing.location_id)}
+          onClose={() => setViewing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function FixedCustomerDetailView({
+  rule,
+  locationName,
+  onClose,
+}: {
+  rule: FixedCustomer;
+  locationName: string;
+  onClose: () => void;
+}) {
+  const [occurrences, setOccurrences] = useState<FixedCustomerOccurrence[] | null>(null);
+  const today = ymd(new Date());
+  const renewalDue = needsRenewalReminder(rule, today);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFixedCustomerSchedule(rule.id).then((data) => {
+      if (!cancelled) setOccurrences(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rule.id]);
+
+  const allUpcoming = (occurrences ?? []).filter((o) => o.date >= today);
+  const upcoming = allUpcoming.slice(0, 20);
+  const past = (occurrences ?? [])
+    .filter((o) => o.date < today)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 10);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-3 flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-brand-forest">{rule.customer_name}</h2>
+            {rule.phone && <p className="text-xs text-brand-forest/60">{rule.phone}</p>}
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Đóng"
+            className="rounded-full p-1 text-brand-forest/60 hover:bg-brand-cream"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="rounded-lg border border-brand-forest/15 px-4">
+          <ReviewRow label="Vị trí" value={locationName} />
+          {rule.seat_number && <ReviewRow label="Số vị trí" value={rule.seat_number} />}
+          <ReviewRow label="Lặp lại" value={describeRecurrence(rule)} />
+          <ReviewRow label="Giờ" value={`${rule.start_time.slice(0, 5)} - ${rule.end_time.slice(0, 5)}`} />
+          <ReviewRow
+            label="Hiệu lực"
+            value={`${formatDateDMY(rule.effective_from)} → ${
+              rule.effective_until ? formatDateDMY(rule.effective_until) : "vô thời hạn"
+            }`}
+          />
+          <ReviewRow
+            label="Tiền cọc"
+            value={rule.deposit_amount > 0 ? formatMoney(rule.deposit_amount) : "-"}
+          />
+          <ReviewRow label="Trạng thái" value={rule.active ? "Đang áp dụng" : "Tạm ngưng"} />
+          <ReviewRow label="Ghi chú" value={rule.note || "-"} />
+        </div>
+
+        {renewalDue && (
+          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-600">
+            ⚠ Sắp hết hạn ({formatDateDMY(rule.effective_until)}) — nhắc khách gia hạn.
+          </p>
+        )}
+
+        <div className="mt-4">
+          <h3 className="mb-2 text-sm font-semibold text-brand-forest">Lịch đặt của khách</h3>
+          {occurrences === null ? (
+            <p className="text-sm text-brand-forest/50">Đang tải...</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="mb-1 text-xs font-medium text-brand-forest/60">
+                  Sắp tới ({allUpcoming.length}
+                  {allUpcoming.length > upcoming.length ? `, hiện ${upcoming.length} gần nhất` : ""})
+                </p>
+                {upcoming.length === 0 ? (
+                  <p className="text-xs text-brand-forest/40">Không có lịch sắp tới.</p>
+                ) : (
+                  <ul className="flex flex-wrap gap-1.5">
+                    {upcoming.map((o) => (
+                      <li
+                        key={o.date}
+                        className="rounded-full bg-brand-forest/10 px-2 py-0.5 text-xs font-medium text-brand-forest"
+                      >
+                        {formatDateDMY(o.date)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium text-brand-forest/60">
+                  Đã qua gần đây
+                </p>
+                {past.length === 0 ? (
+                  <p className="text-xs text-brand-forest/40">Chưa có lịch nào đã qua.</p>
+                ) : (
+                  <ul className="flex flex-col gap-1">
+                    {past.map((o) => (
+                      <li
+                        key={o.date}
+                        className="flex items-center justify-between rounded-lg border border-brand-forest/10 px-2 py-1 text-xs"
+                      >
+                        <span className="text-brand-forest/80">{formatDateDMY(o.date)}</span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 font-medium ${
+                            o.arrived
+                              ? "bg-brand-forest/10 text-brand-forest"
+                              : "bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          {o.arrived ? "Đã đến" : "Chưa đến"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-brand-forest/30 px-4 py-2 text-sm font-medium text-brand-forest hover:bg-brand-cream"
+          >
+            Đóng
+          </button>
+        </div>
       </div>
     </div>
   );

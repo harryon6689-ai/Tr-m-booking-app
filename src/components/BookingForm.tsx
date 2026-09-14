@@ -560,11 +560,6 @@ export default function BookingForm({
               </button>
             ))}
           </div>
-          {!isAdmin && (
-            <p className="mt-1.5 text-xs text-brand-forest/50">
-              Chỉ Quản lý (Admin) mới tạo được lịch đặt định kỳ.
-            </p>
-          )}
         </div>
       )}
       <div>
