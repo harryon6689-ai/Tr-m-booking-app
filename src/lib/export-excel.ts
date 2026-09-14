@@ -13,7 +13,10 @@ export async function buildExcelWorkbookBytes(sheets: Sheet[]): Promise<Uint8Arr
     const worksheet = XLSX.utils.json_to_sheet(sheet.rows);
     XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
   }
-  return XLSX.write(workbook, { type: "array", bookType: "xlsx" }) as Uint8Array;
+  const result = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+  // `type: "array"` actually returns a plain ArrayBuffer (no `.length`/`.subarray`),
+  // not a Uint8Array — normalize it so downstream code can rely on typed-array methods.
+  return result instanceof Uint8Array ? result : new Uint8Array(result as ArrayBuffer);
 }
 
 export function downloadExcelBytes(bytes: Uint8Array, filename: string) {
