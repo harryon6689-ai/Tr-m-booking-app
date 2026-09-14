@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BookingStatus, Database } from "@/lib/types/database";
 import {
   getKolBookings,
@@ -54,14 +54,14 @@ function StarRating({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex gap-0.5">
+    <div className="flex">
       {[1, 2, 3, 4, 5].map((n) => (
         <button
           key={n}
           type="button"
           disabled={disabled}
           onClick={() => onChange(n === value ? 0 : n)}
-          className={`${size} leading-none transition disabled:cursor-default ${
+          className={`${size} flex min-h-9 min-w-9 items-center justify-center leading-none transition disabled:cursor-default ${
             n <= value ? "text-yellow-400" : "text-brand-forest/20 hover:text-yellow-300"
           }`}
           aria-label={`${n} sao`}
@@ -299,15 +299,17 @@ export default function KolClient({
     refetch();
   }
 
-  const activeBookings = bookings.filter((b) => b.status !== "hủy");
-  const reviewedBookings = activeBookings.filter((b) => b.has_reviewed);
-  const summary = {
-    totalBooked: activeBookings.length,
-    totalReviewed: reviewedBookings.length,
-    totalNotReviewed: activeBookings.length - reviewedBookings.length,
-    totalCancelled: bookings.length - activeBookings.length,
-    reviewedCost: reviewedBookings.reduce((sum, b) => sum + b.review_price, 0),
-  };
+  const summary = useMemo(() => {
+    const activeBookings = bookings.filter((b) => b.status !== "hủy");
+    const reviewedBookings = activeBookings.filter((b) => b.has_reviewed);
+    return {
+      totalBooked: activeBookings.length,
+      totalReviewed: reviewedBookings.length,
+      totalNotReviewed: activeBookings.length - reviewedBookings.length,
+      totalCancelled: bookings.length - activeBookings.length,
+      reviewedCost: reviewedBookings.reduce((sum, b) => sum + b.review_price, 0),
+    };
+  }, [bookings]);
 
   const now = new Date();
   const isToday = dateFrom === dateStr(now) && dateTo === dateStr(now);
@@ -623,7 +625,7 @@ export default function KolClient({
                   <td className="px-3 py-2">
                     <button
                       onClick={() => handleDelete(b)}
-                      className="text-xs font-semibold text-red-600 hover:underline"
+                      className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-red-600 hover:underline"
                     >
                       Xóa
                     </button>

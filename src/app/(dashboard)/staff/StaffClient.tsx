@@ -303,17 +303,17 @@ export default function StaffClient({
                   </span>
                 </td>
                 <td className="px-3 py-2">
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center gap-1">
                     <button
                       onClick={() => openEdit(account)}
-                      className="text-xs font-semibold text-brand-forest hover:underline"
+                      className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-brand-forest hover:underline"
                     >
                       Sửa
                     </button>
                     <button
                       onClick={() => handleResetPassword(account.id)}
                       disabled={resettingId === account.id}
-                      className="text-xs font-semibold text-brand-forest/70 hover:underline disabled:opacity-50"
+                      className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-brand-forest/70 hover:underline disabled:opacity-50"
                     >
                       Đặt lại mật khẩu
                     </button>
@@ -321,7 +321,7 @@ export default function StaffClient({
                       <button
                         onClick={() => handleDelete(account)}
                         disabled={deletingId === account.id}
-                        className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
+                        className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
                       >
                         {deletingId === account.id ? "Đang xóa..." : "Xóa"}
                       </button>

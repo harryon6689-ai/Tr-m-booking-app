@@ -105,7 +105,19 @@ export default function FloorMapGrid({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "bookings" },
-        () => router.refresh()
+        (payload) => {
+          // The floor map only shows today's bookings — skip the refresh
+          // when the changed row is clearly for a different day, so edits
+          // to future/past bookings elsewhere in the app don't force every
+          // open floor-map tab to re-fetch.
+          const row = (payload.new ?? payload.old) as
+            | { start_time?: string }
+            | null;
+          if (row?.start_time && new Date(row.start_time).toDateString() !== new Date().toDateString()) {
+            return;
+          }
+          router.refresh();
+        }
       )
       .subscribe();
 

@@ -735,7 +735,7 @@ export default function CheckInClient({
                             <button
                               onClick={() => handleCancel(r)}
                               disabled={cancelingId === r.id}
-                              className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
+                              className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
                             >
                               Hủy đặt chỗ
                             </button>
@@ -747,7 +747,7 @@ export default function CheckInClient({
                   <td className="px-2 py-2 text-center align-top">
                     <button
                       onClick={() => setViewingRow(r)}
-                      className="text-xs font-semibold text-brand-forest hover:underline"
+                      className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-brand-forest hover:underline"
                     >
                       Xem
                     </button>

@@ -14,14 +14,22 @@
   --color-brand-cream: var(--color-brand-cream);
   --color-brand-forest: var(--color-brand-forest);
   --color-brand-amber: var(--color-brand-amber);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Prevent iOS Safari's forced zoom-in when a sub-16px input/select/textarea
+   is focused — every filter bar and form in the app uses text-sm (14px). */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 @keyframes marquee-ltr {
@@ -35,4 +43,10 @@ body {
 
 .marquee-track {
   animation: marquee-ltr 40s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
 }

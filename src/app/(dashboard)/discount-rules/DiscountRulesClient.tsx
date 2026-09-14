@@ -434,19 +434,19 @@ function PricingRulesPanel({
                 </td>
                 {canEdit && (
                   <td className="px-3 py-2">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-1">
                       <button
                         onClick={() => {
                           setEditing(r);
                           setMode("form");
                         }}
-                        className="text-xs font-semibold text-brand-forest hover:underline"
+                        className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-brand-forest hover:underline"
                       >
                         Sửa
                       </button>
                       <button
                         onClick={() => handleToggleActive(r)}
-                        className="text-xs font-semibold text-brand-forest/70 hover:underline"
+                        className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-brand-forest/70 hover:underline"
                       >
                         {r.active ? "Tạm ngưng" : "Kích hoạt"}
                       </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Database, RecurrenceType } from "@/lib/types/database";
 import {
@@ -97,28 +97,31 @@ export default function FixedCustomersClient({
   const locationName = (id: string) =>
     locations.find((l) => l.id === id)?.name ?? "?";
 
-  const filteredCustomers = fixedCustomers
-    .filter((rule) => {
-      if (recurrenceFilter !== "all" && rule.recurrence_type !== recurrenceFilter) {
-        return false;
-      }
-      if ((dateFrom || dateTo) && !overlapsDateRange(rule, dateFrom, dateTo)) {
-        return false;
-      }
-      const q = nameQuery.trim().toLowerCase();
-      if (q && !rule.customer_name.toLowerCase().includes(q) && !(rule.phone ?? "").includes(q)) {
-        return false;
-      }
-      return true;
-    })
-    // Rules needing renewal float to the top so staff notice them first;
-    // everything else stays alphabetical for easy scanning.
-    .sort((a, b) => {
-      const aNeeds = needsRenewalReminder(a, today);
-      const bNeeds = needsRenewalReminder(b, today);
-      if (aNeeds !== bNeeds) return aNeeds ? -1 : 1;
-      return a.customer_name.localeCompare(b.customer_name, "vi");
-    });
+  const filteredCustomers = useMemo(() => {
+    return fixedCustomers
+      .filter((rule) => {
+        if (recurrenceFilter !== "all" && rule.recurrence_type !== recurrenceFilter) {
+          return false;
+        }
+        if ((dateFrom || dateTo) && !overlapsDateRange(rule, dateFrom, dateTo)) {
+          return false;
+        }
+        const q = nameQuery.trim().toLowerCase();
+        if (q && !rule.customer_name.toLowerCase().includes(q) && !(rule.phone ?? "").includes(q)) {
+          return false;
+        }
+        return true;
+      })
+      // Rules needing renewal float to the top so staff notice them first;
+      // everything else stays alphabetical for easy scanning. Computed once
+      // per rule up front instead of on every pairwise sort comparison.
+      .map((rule) => ({ rule, needsRenewal: needsRenewalReminder(rule, today) }))
+      .sort((a, b) => {
+        if (a.needsRenewal !== b.needsRenewal) return a.needsRenewal ? -1 : 1;
+        return a.rule.customer_name.localeCompare(b.rule.customer_name, "vi");
+      })
+      .map(({ rule }) => rule);
+  }, [fixedCustomers, recurrenceFilter, dateFrom, dateTo, nameQuery, today]);
 
   function openCreate() {
     setEditing(null);
@@ -332,7 +335,7 @@ export default function FixedCustomersClient({
                           <button
                             type="button"
                             onClick={() => openRenew(rule)}
-                            className="rounded-lg border border-red-300 px-2 py-0.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                            className="min-h-9 rounded-lg border border-red-300 px-2 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
                           >
                             Gia hạn
                           </button>
@@ -355,17 +358,17 @@ export default function FixedCustomersClient({
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-1">
                       <button
                         onClick={() => setViewing(rule)}
-                        className="text-xs font-semibold text-brand-forest hover:underline"
+                        className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-brand-forest hover:underline"
                       >
                         Xem
                       </button>
                       {canEdit && (
                         <button
                           onClick={() => openEdit(rule)}
-                          className="text-xs font-semibold text-brand-forest hover:underline"
+                          className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-brand-forest hover:underline"
                         >
                           Sửa
                         </button>
@@ -373,7 +376,7 @@ export default function FixedCustomersClient({
                       {isAdmin && (
                         <button
                           onClick={() => handleDelete(rule.id)}
-                          className="text-xs font-semibold text-red-600 hover:underline"
+                          className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-red-600 hover:underline"
                         >
                           Xóa
                         </button>

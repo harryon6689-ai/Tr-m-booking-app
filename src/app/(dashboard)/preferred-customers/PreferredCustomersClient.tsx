@@ -187,7 +187,7 @@ export default function PreferredCustomersClient({
                   {canEdit && (
                     <button
                       onClick={() => openBooking(c)}
-                      className="text-xs font-semibold text-brand-forest hover:underline"
+                      className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-brand-forest hover:underline"
                     >
                       Đặt lịch
                     </button>
@@ -195,16 +195,16 @@ export default function PreferredCustomersClient({
                 </td>
                 {isAdmin && (
                   <td className="px-3 py-2">
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => openEdit(c)}
-                        className="text-xs font-semibold text-brand-forest hover:underline"
+                        className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-brand-forest hover:underline"
                       >
                         Sửa
                       </button>
                       <button
                         onClick={() => handleDelete(c.id)}
-                        className="text-xs font-semibold text-red-600 hover:underline"
+                        className="inline-flex min-h-10 items-center px-2 text-xs font-semibold text-red-600 hover:underline"
                       >
                         Xóa
                       </button>

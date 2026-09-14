@@ -103,7 +103,7 @@ export default function Nav({ name, role, permissions }: NavProps) {
             onClick={() => setMenuOpen((v) => !v)}
             aria-label="Mở menu"
             aria-expanded={menuOpen}
-            className="flex h-9 w-9 flex-col items-center justify-center gap-1.5 rounded-lg border border-brand-cream/40 text-brand-cream md:hidden"
+            className="flex h-11 w-11 flex-col items-center justify-center gap-1.5 rounded-lg border border-brand-cream/40 text-brand-cream md:hidden"
           >
             <span
               className={`h-0.5 w-5 bg-current transition ${menuOpen ? "translate-y-2 rotate-45" : ""}`}
