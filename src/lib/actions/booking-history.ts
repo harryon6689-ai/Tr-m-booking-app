@@ -7,7 +7,7 @@ import type {
   Database,
   RecurrenceType,
 } from "@/lib/types/database";
-import { matchesFixedSchedule, ymd } from "@/lib/fixed-customers-utils";
+import { matchesFixedSchedule, needsRenewalReminder, ymd } from "@/lib/fixed-customers-utils";
 
 export type CustomerCategory = CustomerOrgType | "khách cố định";
 
@@ -147,6 +147,8 @@ export type CheckinRow = Database["public"]["Tables"]["bookings"]["Row"] & {
   recurrence_type: RecurrenceType | null;
   fixed_customer_id: string | null;
   occurrence_date: string | null;
+  effective_until: string | null;
+  needs_renewal_reminder: boolean;
 };
 
 /**
@@ -191,6 +193,8 @@ export async function getCheckinList(
       recurrence_type: null,
       fixed_customer_id: null,
       occurrence_date: null,
+      effective_until: null,
+      needs_renewal_reminder: false,
     };
   });
 
@@ -270,6 +274,9 @@ export async function getCheckinList(
           recurrence_type: rule.recurrence_type,
           fixed_customer_id: rule.id,
           occurrence_date: dateStr,
+          effective_until: rule.effective_until,
+          needs_renewal_reminder: needsRenewalReminder(rule, dateStr),
+          seat_number: rule.seat_number,
         });
       }
       cursor.setDate(cursor.getDate() + 1);

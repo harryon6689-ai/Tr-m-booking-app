@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { getAllPreferredCustomers } from "@/lib/actions/preferred-customers";
+import { getLocations } from "@/lib/data/locations";
+import { getDiscountRules } from "@/lib/data/discount-rules";
 import { getCurrentUser } from "@/lib/data/current-user";
-import { hasModulePermission, firstPermittedPath } from "@/lib/permissions";
+import { hasModulePermission, firstPermittedPath, canEdit } from "@/lib/permissions";
 import PreferredCustomersClient from "./PreferredCustomersClient";
 
 export default async function PreferredCustomersPage() {
@@ -11,7 +13,11 @@ export default async function PreferredCustomersPage() {
     redirect(firstPermittedPath(user.permissions) ?? "/no-access");
   }
 
-  const preferredCustomers = await getAllPreferredCustomers();
+  const [preferredCustomers, locations, discountRules] = await Promise.all([
+    getAllPreferredCustomers(),
+    getLocations(),
+    getDiscountRules(),
+  ]);
 
   return (
     <div>
@@ -22,7 +28,10 @@ export default async function PreferredCustomersPage() {
       </p>
       <PreferredCustomersClient
         preferredCustomers={preferredCustomers}
+        locations={locations}
+        discountRules={discountRules}
         isAdmin={user.role === "admin"}
+        canEdit={canEdit(user.role, user.view_only)}
       />
     </div>
   );

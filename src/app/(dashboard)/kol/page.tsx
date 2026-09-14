@@ -11,7 +11,8 @@ export default async function KolPage() {
     redirect(firstPermittedPath(user.permissions) ?? "/no-access");
   }
 
-  const kolBookings = await getKolBookings();
+  const today = new Date().toISOString().slice(0, 10);
+  const kolBookings = await getKolBookings({ dateFrom: today, dateTo: today });
 
   return (
     <div>
@@ -21,6 +22,7 @@ export default async function KolPage() {
       </p>
       <KolClient
         initialBookings={kolBookings}
+        initialDate={today}
         currentUserName={user.name}
         canEdit={canEdit(user.role, user.view_only)}
       />

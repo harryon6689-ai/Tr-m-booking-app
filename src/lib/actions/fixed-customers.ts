@@ -9,9 +9,8 @@ export interface FixedCustomerInput {
   customer_name: string;
   phone: string;
   recurrence_type: RecurrenceType;
-  weekday: number | null;
-  day_of_month: number | null;
-  month_of_year: number | null;
+  weekday: number[] | null;
+  day_of_month: number[] | null;
   custom_dates: string[] | null;
   start_time: string; // "HH:mm"
   end_time: string; // "HH:mm"
@@ -20,6 +19,7 @@ export interface FixedCustomerInput {
   active: boolean;
   deposit_amount: number;
   note: string;
+  seat_number: string | null;
 }
 
 async function requireAdmin() {

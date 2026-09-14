@@ -14,6 +14,7 @@ import {
   setMinimumSpendShortfallPaid,
 } from "@/lib/actions/bookings";
 import { setFixedCustomerArrived } from "@/lib/actions/fixed-customer-checkins";
+import { formatDateDMY } from "@/lib/fixed-customers-utils";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import type { Database } from "@/lib/types/database";
 import BookingForm from "@/components/BookingForm";
@@ -324,17 +325,19 @@ export default function CheckInClient({
 
   // Overage fee (phụ thu thêm giờ) and minimum-spend shortfall (thu dưới mức tối
   // thiểu) revenue — computed regardless of paid/unpaid status; "công nợ" tracks
-  // just the unpaid portion of those two.
-  const totalOverageFee = realBookingRows.reduce((sum, r) => sum + r.overage_fee, 0);
-  const totalOverageFeeUnpaid = realBookingRows
+  // just the unpaid portion of those two. A cancelled booking never counts
+  // toward these — only its deposit (already tracked separately above) does.
+  const activeBookingRows = realBookingRows.filter((r) => r.status !== "hủy");
+  const totalOverageFee = activeBookingRows.reduce((sum, r) => sum + r.overage_fee, 0);
+  const totalOverageFeeUnpaid = activeBookingRows
     .filter((r) => r.overage_fee > 0 && !r.overage_fee_paid)
     .reduce((sum, r) => sum + r.overage_fee, 0);
-  const totalShortfall = realBookingRows.reduce((sum, r) => {
+  const totalShortfall = activeBookingRows.reduce((sum, r) => {
     const minimumSpend = locations.find((l) => l.id === r.location_id)?.minimum_spend;
     if (!minimumSpend || minimumSpend <= 0) return sum;
     return sum + Math.max(0, minimumSpend - (r.actual_drink_spend ?? 0));
   }, 0);
-  const totalShortfallUnpaid = realBookingRows.reduce((sum, r) => {
+  const totalShortfallUnpaid = activeBookingRows.reduce((sum, r) => {
     if (r.minimum_spend_shortfall_paid) return sum;
     const minimumSpend = locations.find((l) => l.id === r.location_id)?.minimum_spend;
     if (!minimumSpend || minimumSpend <= 0) return sum;
@@ -519,28 +522,29 @@ export default function CheckInClient({
         <table className="w-full text-left text-sm">
           <thead className="bg-brand-cream text-brand-forest/70">
             <tr>
-              <th className="whitespace-nowrap px-3 py-2 font-semibold">Giờ</th>
-              <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
-              <th className="whitespace-nowrap px-3 py-2 font-semibold">Khách hàng</th>
-              <th className="whitespace-nowrap px-3 py-2 font-semibold">SĐT</th>
-              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Đối tượng</th>
-              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Số người</th>
-              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Đặt cọc</th>
-              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">
-                Cần thanh toán thêm
+              <th className="whitespace-nowrap px-2 py-2 font-semibold">Giờ / Vị trí</th>
+              <th className="whitespace-nowrap px-2 py-2 font-semibold">Khách hàng</th>
+              <th className="whitespace-nowrap px-2 py-2 text-center font-semibold">Đặt cọc</th>
+              <th className="whitespace-nowrap px-2 py-2 text-center font-semibold">
+                Thanh toán thêm
               </th>
-              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">
-                Phụ thu thêm giờ
-              </th>
-              <th className="whitespace-nowrap px-3 py-2 font-semibold">Ghi chú</th>
-              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Trạng thái</th>
-              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold"></th>
+              <th className="whitespace-nowrap px-2 py-2 font-semibold">Ghi chú</th>
+              <th className="whitespace-nowrap px-2 py-2 text-center font-semibold">Trạng thái</th>
+              <th className="whitespace-nowrap px-2 py-2 text-center font-semibold"></th>
             </tr>
           </thead>
           <tbody>
             {filteredRows.map((r) => {
               const arrived = r.status === "đã tới";
               const cancelled = r.status === "hủy";
+              const minimumSpend = locations.find((l) => l.id === r.location_id)?.minimum_spend;
+              const shortfall =
+                !r.is_fixed_customer && minimumSpend && minimumSpend > 0
+                  ? Math.max(0, minimumSpend - (r.actual_drink_spend ?? 0))
+                  : 0;
+              const hasShortfallInfo =
+                !r.is_fixed_customer && !cancelled && !!minimumSpend && minimumSpend > 0;
+              const hasOverage = !r.is_fixed_customer && !cancelled && r.overage_fee > 0;
               return (
                 <tr
                   key={r.id}
@@ -548,67 +552,65 @@ export default function CheckInClient({
                     cancelled ? "opacity-60" : arrived ? "bg-brand-forest/5" : ""
                   }`}
                 >
-                  <td className="px-3 py-2 font-medium text-brand-forest">
-                    {formatTimeRange(r.start_time, r.end_time)}
+                  <td className="max-w-[170px] px-2 py-2 align-top">
+                    <div className="whitespace-nowrap font-medium text-brand-forest">
+                      {formatTimeRange(r.start_time, r.end_time)}
+                    </div>
+                    <div className="truncate text-xs text-brand-forest/70" title={r.location_name}>
+                      {r.location_name}
+                      {r.seat_number ? ` · VT ${r.seat_number}` : ""}
+                    </div>
+                    {minimumSpend ? (
+                      <div className="whitespace-nowrap text-[11px] text-brand-forest/50">
+                        Tối thiểu: {formatMoney(minimumSpend)}
+                      </div>
+                    ) : null}
                   </td>
-                  <td className="px-3 py-2 text-brand-forest/80">
-                    {r.location_name}
-                    {(() => {
-                      const minimumSpend = locations.find(
-                        (l) => l.id === r.location_id
-                      )?.minimum_spend;
-                      return minimumSpend ? (
-                        <span className="block text-xs font-normal text-brand-forest/50">
-                          Mức chi tối thiểu: {formatMoney(minimumSpend)}
-                        </span>
-                      ) : null;
-                    })()}
-                  </td>
-                  <td className="px-3 py-2 font-medium">
+                  <td className="max-w-[230px] px-2 py-2 align-top font-medium">
                     {r.is_fixed_customer ? (
                       <button
                         onClick={() =>
                           router.push(`/fixed-customers?edit=${r.fixed_customer_id}`)
                         }
-                        className="text-brand-forest hover:underline"
+                        className="block max-w-full truncate text-brand-forest hover:underline"
                       >
                         {r.customer_name}
                       </button>
                     ) : (
                       <button
                         onClick={() => setEditingRow(r)}
-                        className="text-brand-forest hover:underline"
+                        className="block max-w-full truncate text-brand-forest hover:underline"
                       >
                         {r.customer_name}
                       </button>
                     )}
                     {r.is_fixed_customer && r.recurrence_type && (
-                      <span className="block text-xs font-normal text-brand-forest/60">
+                      <span className="block truncate text-xs font-normal text-brand-forest/60">
                         Khách cố định · {RECURRENCE_LABEL[r.recurrence_type] ?? r.recurrence_type}
                       </span>
                     )}
+                    {r.is_fixed_customer && r.needs_renewal_reminder && (
+                      <button
+                        onClick={() =>
+                          router.push(`/fixed-customers?renew=${r.fixed_customer_id}`)
+                        }
+                        className="block truncate text-left text-xs font-bold text-red-600 hover:underline"
+                      >
+                        ⚠ Hết hạn {formatDateDMY(r.effective_until)} — nhắc gia hạn
+                      </button>
+                    )}
                     {r.organization_name && (
-                      <span className="block text-xs font-normal text-brand-forest/60">
+                      <span className="block truncate text-xs font-normal text-brand-forest/60">
                         {r.organization_name}
                       </span>
                     )}
+                    <div className="mt-0.5 truncate text-xs font-normal text-brand-forest/60">
+                      {r.phone || "-"} ·{" "}
+                      {r.org_type === "công ty/tổ chức" ? "Công ty/Tổ chức" : "Cá nhân"} ·{" "}
+                      {r.attendee_count ?? "-"} người
+                    </div>
                   </td>
-                  <td className="px-3 py-2 text-brand-forest/80">{r.phone || "-"}</td>
-                  <td className="px-3 py-2 text-center">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        r.org_type === "công ty/tổ chức"
-                          ? "bg-brand-forest/10 text-brand-forest"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {r.org_type === "công ty/tổ chức" ? "Công ty/Tổ chức" : "Cá nhân"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-center text-brand-forest/80">
-                    {r.attendee_count ?? "-"}
-                  </td>
-                  <td className="px-3 py-2 text-center">
+                  <td className="px-2 py-2 text-center align-top">
                     <div className="flex flex-col items-center gap-1">
                       {r.deposit_amount > 0 ? (
                         <span className="rounded-full bg-brand-forest/10 px-2 py-0.5 text-xs font-bold text-brand-forest">
@@ -643,79 +645,71 @@ export default function CheckInClient({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-center">
-                    {(() => {
-                      const minimumSpend = locations.find(
-                        (l) => l.id === r.location_id
-                      )?.minimum_spend;
-                      if (r.is_fixed_customer || !minimumSpend || minimumSpend <= 0) {
-                        return <span className="text-brand-forest/40">-</span>;
-                      }
-                      const shortfall = Math.max(
-                        0,
-                        minimumSpend - (r.actual_drink_spend ?? 0)
-                      );
-                      if (shortfall <= 0) {
-                        return (
-                          <span className="rounded-full bg-brand-forest/10 px-2 py-0.5 text-xs font-medium text-brand-forest">
-                            Đủ
-                          </span>
-                        );
-                      }
-                      return (
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
-                            {formatMoney(shortfall)}
-                          </span>
-                          <label
-                            className={`flex items-center gap-1 text-[11px] font-bold ${
-                              canEdit ? "cursor-pointer" : "cursor-default opacity-60"
-                            } ${
-                              r.minimum_spend_shortfall_paid
-                                ? "text-brand-forest"
-                                : "text-brand-amber"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={r.minimum_spend_shortfall_paid}
-                              disabled={!canEdit || togglingShortfallId === r.id}
-                              onChange={() => handleToggleShortfallPaid(r)}
-                              className="h-3.5 w-3.5 accent-brand-forest"
-                            />
-                            {r.minimum_spend_shortfall_paid ? "Đã thu" : "Chưa thu"}
-                          </label>
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {r.is_fixed_customer || r.overage_fee <= 0 ? (
+                  <td className="px-2 py-2 text-center align-top">
+                    {!hasShortfallInfo && !hasOverage ? (
                       <span className="text-brand-forest/40">-</span>
                     ) : (
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
-                          {formatMoney(r.overage_fee)}
-                        </span>
-                        <label
-                          className={`flex items-center gap-1 text-[11px] font-bold ${
-                            canEdit ? "cursor-pointer" : "cursor-default opacity-60"
-                          } ${r.overage_fee_paid ? "text-brand-forest" : "text-brand-amber"}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={r.overage_fee_paid}
-                            disabled={!canEdit || togglingOverageId === r.id}
-                            onChange={() => handleToggleOverageFeePaid(r)}
-                            className="h-3.5 w-3.5 accent-brand-forest"
-                          />
-                          {r.overage_fee_paid ? "Đã thu" : "Chưa thu"}
-                        </label>
+                      <div className="flex flex-col items-center gap-1.5">
+                        {hasShortfallInfo && shortfall <= 0 && (
+                          <span className="whitespace-nowrap rounded-full bg-brand-forest/10 px-2 py-0.5 text-[11px] font-medium text-brand-forest">
+                            Đủ mức tối thiểu
+                          </span>
+                        )}
+                        {hasShortfallInfo && shortfall > 0 && (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="whitespace-nowrap rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
+                              {formatMoney(shortfall)} (phụ thu phòng)
+                            </span>
+                            <label
+                              className={`flex items-center gap-1 text-[11px] font-bold ${
+                                canEdit ? "cursor-pointer" : "cursor-default opacity-60"
+                              } ${
+                                r.minimum_spend_shortfall_paid
+                                  ? "text-brand-forest"
+                                  : "text-brand-amber"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={r.minimum_spend_shortfall_paid}
+                                disabled={!canEdit || togglingShortfallId === r.id}
+                                onChange={() => handleToggleShortfallPaid(r)}
+                                className="h-3.5 w-3.5 accent-brand-forest"
+                              />
+                              {r.minimum_spend_shortfall_paid ? "Đã thu" : "Chưa thu"}
+                            </label>
+                          </div>
+                        )}
+                        {hasOverage && (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="whitespace-nowrap rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
+                              +{formatMoney(r.overage_fee)} (thêm giờ)
+                            </span>
+                            <label
+                              className={`flex items-center gap-1 text-[11px] font-bold ${
+                                canEdit ? "cursor-pointer" : "cursor-default opacity-60"
+                              } ${r.overage_fee_paid ? "text-brand-forest" : "text-brand-amber"}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={r.overage_fee_paid}
+                                disabled={!canEdit || togglingOverageId === r.id}
+                                onChange={() => handleToggleOverageFeePaid(r)}
+                                className="h-3.5 w-3.5 accent-brand-forest"
+                              />
+                              {r.overage_fee_paid ? "Đã thu" : "Chưa thu"}
+                            </label>
+                          </div>
+                        )}
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-brand-forest/60">{r.note || "-"}</td>
-                  <td className="px-3 py-2">
+                  <td className="max-w-[140px] px-2 py-2 align-top text-brand-forest/60">
+                    <span className="block truncate" title={r.note || undefined}>
+                      {r.note || "-"}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 align-top">
                     <div className="flex flex-col items-center gap-1">
                       {cancelled ? (
                         <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-bold text-gray-600">
@@ -750,7 +744,7 @@ export default function CheckInClient({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-center">
+                  <td className="px-2 py-2 text-center align-top">
                     <button
                       onClick={() => setViewingRow(r)}
                       className="text-xs font-semibold text-brand-forest hover:underline"

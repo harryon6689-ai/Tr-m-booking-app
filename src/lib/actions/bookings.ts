@@ -32,6 +32,7 @@ export interface BookingInput {
   overage_fee: number;
   overage_fee_paid: boolean;
   minimum_spend_shortfall_paid: boolean;
+  seat_number: string | null;
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -46,6 +47,7 @@ async function checkOverlap(
   locationId: string,
   startTime: string,
   endTime: string,
+  seatNumber: string | null,
   excludeBookingId?: string
 ): Promise<string | null> {
   const { data: location, error: locationError } = await supabase
@@ -60,9 +62,23 @@ async function checkOverlap(
     supabase,
     locationId,
     startTime,
-    endTime
+    endTime,
+    location.type,
+    seatNumber
   );
   if (fixedConflict) return fixedConflict;
+
+  if (location.type === "ghế ngoài" && seatNumber) {
+    const seatConflict = await checkSeatConflict(
+      supabase,
+      locationId,
+      seatNumber,
+      startTime,
+      endTime,
+      excludeBookingId
+    );
+    if (seatConflict) return seatConflict;
+  }
 
   let query = supabase
     .from("bookings")
@@ -96,7 +112,9 @@ async function checkFixedCustomerConflict(
   supabase: Supabase,
   locationId: string,
   startTime: string,
-  endTime: string
+  endTime: string,
+  locationType: string,
+  seatNumber: string | null
 ): Promise<string | null> {
   const start = new Date(startTime);
   const end = new Date(endTime);
@@ -114,11 +132,63 @@ async function checkFixedCustomerConflict(
       matchesFixedSchedule(rule, start) &&
       overlapsFixedTime(rule, start, end, start)
     ) {
+      // Outdoor seats are independent — a different, explicitly assigned seat
+      // doesn't conflict even if the time overlaps.
+      if (
+        locationType === "ghế ngoài" &&
+        seatNumber &&
+        rule.seat_number &&
+        rule.seat_number !== seatNumber
+      ) {
+        continue;
+      }
       return `Trùng lịch khách cố định "${rule.customer_name}" (${rule.start_time.slice(
         0,
         5
       )}-${rule.end_time.slice(0, 5)}). Vui lòng chọn giờ khác.`;
     }
+  }
+
+  return null;
+}
+
+/**
+ * For "ghế ngoài", two bookings can only conflict if they claim the SAME
+ * specific seat with an overlapping time — otherwise they just coexist
+ * within the location's overall capacity (checked separately).
+ */
+async function checkSeatConflict(
+  supabase: Supabase,
+  locationId: string,
+  seatNumber: string,
+  startTime: string,
+  endTime: string,
+  excludeBookingId?: string
+): Promise<string | null> {
+  let query = supabase
+    .from("bookings")
+    .select("customer_name, start_time, end_time")
+    .eq("location_id", locationId)
+    .eq("seat_number", seatNumber)
+    .neq("status", "hủy")
+    .lt("start_time", endTime)
+    .gt("end_time", startTime)
+    .limit(1);
+
+  if (excludeBookingId) {
+    query = query.neq("id", excludeBookingId);
+  }
+
+  const { data, error } = await query;
+  if (error) return error.message;
+
+  if (data && data.length > 0) {
+    const conflict = data[0];
+    return `Vị trí ${seatNumber} đã có khách "${conflict.customer_name}" đặt trùng giờ (${new Date(
+      conflict.start_time
+    ).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}-${new Date(
+      conflict.end_time
+    ).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}). Vui lòng chọn giờ khác.`;
   }
 
   return null;
@@ -141,7 +211,8 @@ export async function createBooking(input: BookingInput) {
       supabase,
       input.location_id,
       input.start_time,
-      input.end_time
+      input.end_time,
+      input.seat_number
     );
     if (conflict) return { error: conflict };
   }
@@ -169,6 +240,7 @@ export async function updateBooking(id: string, input: BookingInput) {
       input.location_id,
       input.start_time,
       input.end_time,
+      input.seat_number,
       id
     );
     if (conflict) return { error: conflict };

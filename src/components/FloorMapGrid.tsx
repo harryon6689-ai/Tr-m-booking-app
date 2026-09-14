@@ -77,6 +77,7 @@ interface FloorMapGridProps {
   pricingRules: PricingRule[];
   preferredCustomers: PreferredCustomer[];
   canEdit: boolean;
+  isAdmin: boolean;
 }
 
 export default function FloorMapGrid({
@@ -86,6 +87,7 @@ export default function FloorMapGrid({
   pricingRules,
   preferredCustomers,
   canEdit,
+  isAdmin,
 }: FloorMapGridProps) {
   const router = useRouter();
   const [now, setNow] = useState(() => new Date());
@@ -192,6 +194,7 @@ export default function FloorMapGrid({
           pricingRules={pricingRules}
           preferredCustomers={preferredCustomers}
           canEdit={canEdit}
+          isAdmin={isAdmin}
           onClose={() => setSelected(null)}
         />
       )}

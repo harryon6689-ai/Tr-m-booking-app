@@ -6,7 +6,6 @@ import type {
   CustomerOrgType,
   CustomerType,
   Database,
-  RecurrenceType,
 } from "@/lib/types/database";
 import { EQUIPMENT_OPTIONS } from "@/lib/types/database";
 import { createBooking, type BookingInput } from "@/lib/actions/bookings";
@@ -16,58 +15,30 @@ import {
 } from "@/lib/actions/fixed-customers";
 import CurrencyInput from "@/components/CurrencyInput";
 import ReviewRow from "@/components/ReviewRow";
+import WeekdayPicker from "@/components/WeekdayPicker";
+import DayOfMonthPicker from "@/components/DayOfMonthPicker";
+import DateListPicker from "@/components/DateListPicker";
 import {
   formatPricingRule,
   formatAttendeeRange,
   computeSuggestedPrice,
   matchingPricingRules,
 } from "@/lib/pricing-rules-utils";
+import { defaultEffectiveUntil, formatDayMonth } from "@/lib/fixed-customers-utils";
+import {
+  type EntryType,
+  ENTRY_TYPE_OPTIONS,
+  entryTypeLabel,
+  entryTypeToRecurrenceType,
+  recurrenceLabel,
+} from "@/lib/recurrence-entry-type";
 
 type Location = Database["public"]["Tables"]["locations"]["Row"];
 type DiscountRule = Database["public"]["Tables"]["discount_rules"]["Row"];
 type PricingRule = Database["public"]["Tables"]["pricing_rules"]["Row"];
 type PreferredCustomer = Database["public"]["Tables"]["preferred_customers"]["Row"];
 
-type EntryType = "single" | "weekly" | "monthly" | "quarterly" | "yearly";
 type Step = "form" | "review" | "success";
-
-const WEEKDAY_LABELS = [
-  "Chủ nhật",
-  "Thứ 2",
-  "Thứ 3",
-  "Thứ 4",
-  "Thứ 5",
-  "Thứ 6",
-  "Thứ 7",
-];
-
-const ENTRY_TYPE_OPTIONS: { value: EntryType; label: string; adminOnly: boolean }[] = [
-  { value: "single", label: "Lẻ (theo ngày)", adminOnly: false },
-  { value: "weekly", label: "Định kỳ - Tuần", adminOnly: true },
-  { value: "monthly", label: "Định kỳ - Tháng", adminOnly: true },
-  { value: "quarterly", label: "Định kỳ - Quý", adminOnly: true },
-  { value: "yearly", label: "Định kỳ - Năm", adminOnly: true },
-];
-
-function entryTypeLabel(entryType: EntryType): string {
-  return ENTRY_TYPE_OPTIONS.find((o) => o.value === entryType)?.label ?? "";
-}
-
-function recurrenceLabel(entryType: EntryType, startDate: string): string {
-  const d = new Date(`${startDate}T00:00:00`);
-  switch (entryType) {
-    case "weekly":
-      return `Lặp lại hàng tuần vào ${WEEKDAY_LABELS[d.getDay()]}`;
-    case "monthly":
-      return `Lặp lại hàng tháng vào ngày ${d.getDate()}`;
-    case "quarterly":
-      return `Lặp lại mỗi 3 tháng, vào ngày ${d.getDate()} (tính từ ngày bắt đầu)`;
-    case "yearly":
-      return `Lặp lại hàng năm vào ${d.getDate()}/${d.getMonth() + 1}`;
-    default:
-      return "";
-  }
-}
 
 function formatDateVn(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00`);
@@ -110,6 +81,9 @@ export default function QuickBookingClient({
   const [startDate, setStartDate] = useState(todayStr());
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
+  const [weekdays, setWeekdays] = useState<number[]>([new Date().getDay()]);
+  const [monthDays, setMonthDays] = useState<number[]>([new Date().getDate()]);
+  const [yearDates, setYearDates] = useState<string[]>([todayStr()]);
   const [effectiveUntil, setEffectiveUntil] = useState("");
   const [customerType, setCustomerType] = useState<CustomerType>("thường");
   const [discountApplied, setDiscountApplied] = useState(0);
@@ -124,6 +98,7 @@ export default function QuickBookingClient({
   const [vatTaxCode, setVatTaxCode] = useState("");
   const [vatEmail, setVatEmail] = useState("");
   const [note, setNote] = useState("");
+  const [seatNumber, setSeatNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -230,6 +205,18 @@ export default function QuickBookingClient({
       setError("Giờ kết thúc phải sau giờ bắt đầu.");
       return;
     }
+    if (entryType === "weekly" && weekdays.length === 0) {
+      setError("Chọn ít nhất 1 thứ trong tuần.");
+      return;
+    }
+    if ((entryType === "monthly" || entryType === "quarterly") && monthDays.length === 0) {
+      setError("Chọn ít nhất 1 ngày trong tháng.");
+      return;
+    }
+    if (entryType === "yearly" && yearDates.length === 0) {
+      setError("Thêm ít nhất 1 ngày lặp lại mỗi năm.");
+      return;
+    }
     if (
       entryType === "single" &&
       vatInvoiceRequested &&
@@ -273,6 +260,7 @@ export default function QuickBookingClient({
         vat_tax_code: vatInvoiceRequested ? vatTaxCode : null,
         vat_email: vatInvoiceRequested ? vatEmail : null,
         actual_drink_spend: 0,
+        seat_number: location?.type === "ghế ngoài" ? seatNumber || null : null,
       };
       const result = await createBooking(input);
       setLoading(false);
@@ -284,25 +272,19 @@ export default function QuickBookingClient({
         `Đã đặt chỗ cho "${customerName}" tại ${locationName}, ngày ${formatDateVn(startDate)} (${startTime} - ${endTime}).`
       );
     } else {
-      const d = new Date(`${startDate}T00:00:00`);
-      const recurrenceType: RecurrenceType =
-        entryType === "weekly"
-          ? "hàng tuần"
-          : entryType === "monthly"
-          ? "hàng tháng"
-          : entryType === "quarterly"
-          ? "hàng quý"
-          : "hàng năm";
+      const recurrenceType = entryTypeToRecurrenceType(entryType)!;
 
       const input: FixedCustomerInput = {
         location_id: locationId,
         customer_name: customerName,
         phone,
         recurrence_type: recurrenceType,
-        weekday: recurrenceType === "hàng tuần" ? d.getDay() : null,
-        day_of_month: recurrenceType === "hàng tuần" ? null : d.getDate(),
-        month_of_year: recurrenceType === "hàng năm" ? d.getMonth() + 1 : null,
-        custom_dates: null,
+        weekday: recurrenceType === "hàng tuần" ? weekdays : null,
+        day_of_month:
+          recurrenceType === "hàng tháng" || recurrenceType === "hàng quý"
+            ? monthDays
+            : null,
+        custom_dates: recurrenceType === "hàng năm" ? yearDates : null,
         start_time: startTime,
         end_time: endTime,
         effective_from: startDate,
@@ -310,6 +292,7 @@ export default function QuickBookingClient({
         active: true,
         deposit_amount: 0,
         note,
+        seat_number: location?.type === "ghế ngoài" ? seatNumber || null : null,
       };
       const result = await createFixedCustomer(input);
       setLoading(false);
@@ -320,7 +303,10 @@ export default function QuickBookingClient({
       setSuccessMessage(
         `Đã tạo lịch định kỳ cho "${customerName}" tại ${locationName} — ${recurrenceLabel(
           entryType,
-          startDate
+          startDate,
+          weekdays,
+          monthDays,
+          yearDates
         )}.`
       );
     }
@@ -349,6 +335,7 @@ export default function QuickBookingClient({
     setAppliedPreferredId(null);
     setDismissedPreferredId(null);
     setNote("");
+    setSeatNumber("");
     setError(null);
     setSuccessMessage(null);
     setStep("form");
@@ -386,6 +373,9 @@ export default function QuickBookingClient({
           <ReviewRow label="Vị trí" value={locationName} />
           <ReviewRow label="Tên khách" value={customerName} />
           <ReviewRow label="Số điện thoại" value={phone || "-"} />
+          {location?.type === "ghế ngoài" && (
+            <ReviewRow label="Số vị trí" value={seatNumber || "-"} />
+          )}
           {entryType === "single" && (
             <>
               <ReviewRow
@@ -403,7 +393,7 @@ export default function QuickBookingClient({
           ) : (
             <>
               <ReviewRow label="Bắt đầu từ ngày" value={formatDateVn(startDate)} />
-              <ReviewRow label="Lặp lại" value={recurrenceLabel(entryType, startDate)} />
+              <ReviewRow label="Lặp lại" value={recurrenceLabel(entryType, startDate, weekdays, monthDays, yearDates)} />
               <ReviewRow
                 label="Hiệu lực đến"
                 value={effectiveUntil ? formatDateVn(effectiveUntil) : "Vô thời hạn"}
@@ -487,7 +477,13 @@ export default function QuickBookingClient({
             <button
               key={o.value}
               type="button"
-              onClick={() => setEntryType(o.value)}
+              onClick={() => {
+                setEntryType(o.value);
+                const recurrenceType = entryTypeToRecurrenceType(o.value);
+                setEffectiveUntil(
+                  recurrenceType ? defaultEffectiveUntil(recurrenceType, startDate) ?? "" : ""
+                );
+              }}
               className={`rounded-lg px-3 py-1.5 text-sm font-bold transition ${
                 entryType === o.value
                   ? "bg-brand-forest text-brand-cream"
@@ -522,7 +518,7 @@ export default function QuickBookingClient({
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Tên khách
@@ -549,6 +545,20 @@ export default function QuickBookingClient({
           />
         </div>
       </div>
+
+      {location?.type === "ghế ngoài" && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-brand-forest">
+            Số vị trí
+          </label>
+          <input
+            value={seatNumber}
+            onChange={(e) => setSeatNumber(e.target.value)}
+            placeholder="VD: A12"
+            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+          />
+        </div>
+      )}
 
       {entryType === "single" &&
         matchedPreferredCustomer &&
@@ -593,7 +603,7 @@ export default function QuickBookingClient({
       )}
 
       {entryType === "single" && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-brand-forest">
               Khách hàng là
@@ -674,10 +684,37 @@ export default function QuickBookingClient({
         </div>
       </div>
 
+      {entryType === "weekly" && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-brand-forest">
+            Vào các thứ (có thể chọn nhiều)
+          </label>
+          <WeekdayPicker value={weekdays} onChange={setWeekdays} />
+        </div>
+      )}
+
+      {(entryType === "monthly" || entryType === "quarterly") && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-brand-forest">
+            Vào các ngày trong tháng (có thể chọn nhiều)
+          </label>
+          <DayOfMonthPicker value={monthDays} onChange={setMonthDays} />
+        </div>
+      )}
+
+      {entryType === "yearly" && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-brand-forest">
+            Các ngày lặp lại mỗi năm (chỉ lấy ngày/tháng, năm không quan trọng)
+          </label>
+          <DateListPicker value={yearDates} onChange={setYearDates} formatChip={formatDayMonth} />
+        </div>
+      )}
+
       {entryType !== "single" && (
         <>
           <p className="rounded-lg bg-brand-cream px-3 py-2 text-xs font-medium text-brand-forest">
-            {recurrenceLabel(entryType, startDate)}
+            {recurrenceLabel(entryType, startDate, weekdays, monthDays, yearDates)}
           </p>
           <div>
             <label className="mb-1 block text-sm font-medium text-brand-forest">

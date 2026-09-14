@@ -135,6 +135,7 @@ export interface Database {
           actual_drink_spend: number | null;
           overage_fee_paid: boolean;
           minimum_spend_shortfall_paid: boolean;
+          seat_number: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -167,6 +168,7 @@ export interface Database {
           actual_drink_spend?: number | null;
           overage_fee_paid?: boolean;
           minimum_spend_shortfall_paid?: boolean;
+          seat_number?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -199,6 +201,7 @@ export interface Database {
           actual_drink_spend?: number | null;
           overage_fee_paid?: boolean;
           minimum_spend_shortfall_paid?: boolean;
+          seat_number?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -388,9 +391,8 @@ export interface Database {
           customer_name: string;
           phone: string | null;
           recurrence_type: RecurrenceType;
-          weekday: number | null;
-          day_of_month: number | null;
-          month_of_year: number | null;
+          weekday: number[] | null;
+          day_of_month: number[] | null;
           custom_dates: string[] | null;
           start_time: string;
           end_time: string;
@@ -399,6 +401,7 @@ export interface Database {
           active: boolean;
           deposit_amount: number;
           note: string | null;
+          seat_number: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -409,9 +412,8 @@ export interface Database {
           customer_name: string;
           phone?: string | null;
           recurrence_type: RecurrenceType;
-          weekday?: number | null;
-          day_of_month?: number | null;
-          month_of_year?: number | null;
+          weekday?: number[] | null;
+          day_of_month?: number[] | null;
           custom_dates?: string[] | null;
           start_time: string;
           end_time: string;
@@ -420,6 +422,7 @@ export interface Database {
           active?: boolean;
           deposit_amount?: number;
           note?: string | null;
+          seat_number?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -430,9 +433,8 @@ export interface Database {
           customer_name?: string;
           phone?: string | null;
           recurrence_type?: RecurrenceType;
-          weekday?: number | null;
-          day_of_month?: number | null;
-          month_of_year?: number | null;
+          weekday?: number[] | null;
+          day_of_month?: number[] | null;
           custom_dates?: string[] | null;
           start_time?: string;
           end_time?: string;
@@ -441,6 +443,7 @@ export interface Database {
           deposit_amount?: number;
           active?: boolean;
           note?: string | null;
+          seat_number?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;

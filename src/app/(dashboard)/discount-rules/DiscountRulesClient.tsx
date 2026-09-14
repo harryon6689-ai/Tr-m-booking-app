@@ -560,7 +560,7 @@ function PricingRuleForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Số người tối thiểu
@@ -604,7 +604,7 @@ function PricingRuleForm({
       </div>
 
       {pricingMode === "free_hours_plus_overage" ? (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-brand-forest">
               Số giờ miễn phí
@@ -630,7 +630,7 @@ function PricingRuleForm({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-brand-forest">
               Giá trọn gói (đ)

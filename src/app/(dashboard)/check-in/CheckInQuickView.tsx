@@ -36,10 +36,12 @@ export default function CheckInQuickView({
   minimumSpend: number | null;
   onClose: () => void;
 }) {
-  const hasMinimumSpend = !row.is_fixed_customer && minimumSpend != null && minimumSpend > 0;
+  const cancelled = row.status === "hủy";
+  const hasMinimumSpend =
+    !row.is_fixed_customer && !cancelled && minimumSpend != null && minimumSpend > 0;
   const actualSpend = row.actual_drink_spend ?? 0;
   const shortfall = hasMinimumSpend ? Math.max(0, minimumSpend! - actualSpend) : 0;
-  const overageFee = row.is_fixed_customer ? 0 : row.overage_fee;
+  const overageFee = row.is_fixed_customer || cancelled ? 0 : row.overage_fee;
   const totalExtraDue = shortfall + overageFee;
   const hasAnyExtraPolicy = hasMinimumSpend || overageFee > 0;
 
@@ -66,6 +68,7 @@ export default function CheckInQuickView({
 
         <div className="rounded-lg border border-brand-forest/15 px-4">
           <ReviewRow label="Vị trí" value={row.location_name} />
+          {row.seat_number && <ReviewRow label="Số vị trí" value={row.seat_number} />}
           <ReviewRow label="Giờ" value={formatTimeRange(row.start_time, row.end_time)} />
           <ReviewRow label="Số điện thoại" value={row.phone || "-"} />
           <ReviewRow
@@ -115,7 +118,7 @@ export default function CheckInQuickView({
               )}
             </>
           )}
-          {!row.is_fixed_customer && row.overage_fee > 0 && (
+          {overageFee > 0 && (
             <>
               <ReviewRow label="Phụ thu thêm giờ" value={formatMoney(row.overage_fee)} />
               <ReviewRow

@@ -97,29 +97,61 @@ function SummaryCard({
   );
 }
 
-function currentMonthRange() {
-  const now = new Date();
-  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const to = now.toISOString().slice(0, 10);
-  return { from, to };
+/** yyyy-mm-dd in local time (avoids the UTC-shift bug of toISOString()). */
+function dateStr(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function startOfWeek(d: Date) {
+  const monday = new Date(d);
+  const day = monday.getDay(); // 0 = Sun ... 6 = Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  monday.setDate(monday.getDate() + diff);
+  return monday;
+}
+
+function endOfWeek(d: Date) {
+  const sunday = startOfWeek(d);
+  sunday.setDate(sunday.getDate() + 6);
+  return sunday;
+}
+
+function startOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function endOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+}
+
+function startOfYear(d: Date) {
+  return new Date(d.getFullYear(), 0, 1);
+}
+
+function endOfYear(d: Date) {
+  return new Date(d.getFullYear(), 11, 31);
 }
 
 export default function KolClient({
   initialBookings,
+  initialDate,
   currentUserName,
   canEdit,
 }: {
   initialBookings: KolBooking[];
+  initialDate: string;
   currentUserName: string;
   canEdit: boolean;
 }) {
   const [mode, setMode] = useState<"list" | "form">("list");
   const [editing, setEditing] = useState<KolBooking | null>(null);
 
-  const defaultRange = currentMonthRange();
   const [bookings, setBookings] = useState<KolBooking[]>(initialBookings);
-  const [dateFrom, setDateFrom] = useState(defaultRange.from);
-  const [dateTo, setDateTo] = useState(defaultRange.to);
+  const [dateFrom, setDateFrom] = useState(initialDate);
+  const [dateTo, setDateTo] = useState(initialDate);
   const [rawQuery, setRawQuery] = useState("");
   const [query, setQuery] = useState("");
   const [reviewStatus, setReviewStatus] = useState<ReviewStatusFilter>("");
@@ -152,6 +184,31 @@ export default function KolClient({
     }
     refetch();
   }, [refetch]);
+
+  function selectRange(from: Date, to: Date) {
+    setDateFrom(dateStr(from));
+    setDateTo(dateStr(to));
+  }
+
+  function selectToday() {
+    const now = new Date();
+    selectRange(now, now);
+  }
+
+  function selectThisWeek() {
+    const now = new Date();
+    selectRange(startOfWeek(now), endOfWeek(now));
+  }
+
+  function selectThisMonth() {
+    const now = new Date();
+    selectRange(startOfMonth(now), endOfMonth(now));
+  }
+
+  function selectThisYear() {
+    const now = new Date();
+    selectRange(startOfYear(now), endOfYear(now));
+  }
 
   function openCreate() {
     setEditing(null);
@@ -232,6 +289,24 @@ export default function KolClient({
     reviewedCost: reviewedBookings.reduce((sum, b) => sum + b.review_price, 0),
   };
 
+  const now = new Date();
+  const isToday = dateFrom === dateStr(now) && dateTo === dateStr(now);
+  const isThisWeek =
+    dateFrom === dateStr(startOfWeek(now)) && dateTo === dateStr(endOfWeek(now));
+  const isThisMonth =
+    dateFrom === dateStr(startOfMonth(now)) && dateTo === dateStr(endOfMonth(now));
+  const isThisYear =
+    dateFrom === dateStr(startOfYear(now)) && dateTo === dateStr(endOfYear(now));
+  const quickValue = isToday
+    ? "day"
+    : isThisWeek
+    ? "week"
+    : isThisMonth
+    ? "month"
+    : isThisYear
+    ? "year"
+    : "custom";
+
   if (mode === "form") {
     return (
       <KolForm
@@ -250,6 +325,26 @@ export default function KolClient({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-brand-forest/15 bg-white p-4">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-brand-forest/70">Xem nhanh</label>
+          <select
+            value={quickValue}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === "day") selectToday();
+              else if (value === "week") selectThisWeek();
+              else if (value === "month") selectThisMonth();
+              else if (value === "year") selectThisYear();
+            }}
+            className="rounded-lg border border-brand-forest/30 px-3 py-1.5 text-sm font-bold text-brand-forest outline-none focus:border-brand-amber"
+          >
+            <option value="day">KOL Review trong ngày</option>
+            <option value="week">KOL Review trong tuần</option>
+            <option value="month">KOL Review trong tháng</option>
+            <option value="year">KOL Review trong năm</option>
+            {quickValue === "custom" && <option value="custom">Tùy chỉnh</option>}
+          </select>
+        </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-brand-forest/70">Tìm KOL</label>
           <input
@@ -627,7 +722,7 @@ function KolForm({
         </p>
       )}
       <fieldset disabled={!canEdit} className="contents">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Tên KOL
@@ -652,7 +747,7 @@ function KolForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Số điện thoại
@@ -677,7 +772,7 @@ function KolForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Nền tảng
@@ -745,7 +840,7 @@ function KolForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Loại hợp tác

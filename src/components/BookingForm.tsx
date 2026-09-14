@@ -9,14 +9,34 @@ import type {
 } from "@/lib/types/database";
 import { EQUIPMENT_OPTIONS } from "@/lib/types/database";
 import { createBooking, updateBooking, cancelBooking } from "@/lib/actions/bookings";
+import {
+  createFixedCustomer,
+  type FixedCustomerInput,
+} from "@/lib/actions/fixed-customers";
 import CurrencyInput from "@/components/CurrencyInput";
 import ReviewRow from "@/components/ReviewRow";
+import WeekdayPicker from "@/components/WeekdayPicker";
+import DayOfMonthPicker from "@/components/DayOfMonthPicker";
+import DateListPicker from "@/components/DateListPicker";
 import {
   formatPricingRule,
   formatAttendeeRange,
   computeSuggestedPrice,
   matchingPricingRules,
 } from "@/lib/pricing-rules-utils";
+import {
+  defaultEffectiveUntil,
+  formatDateDMY,
+  formatDayMonth,
+  ymd,
+} from "@/lib/fixed-customers-utils";
+import {
+  type EntryType,
+  ENTRY_TYPE_OPTIONS,
+  entryTypeLabel,
+  entryTypeToRecurrenceType,
+  recurrenceLabel,
+} from "@/lib/recurrence-entry-type";
 
 type Booking = Database["public"]["Tables"]["bookings"]["Row"];
 type Location = Database["public"]["Tables"]["locations"]["Row"];
@@ -65,6 +85,7 @@ export default function BookingForm({
   defaultStartHour,
   defaultEndHour,
   canEdit = true,
+  isAdmin = false,
   onDone,
   onCancelForm,
 }: {
@@ -77,10 +98,25 @@ export default function BookingForm({
   defaultStartHour?: number;
   defaultEndHour?: number;
   canEdit?: boolean;
+  isAdmin?: boolean;
   onDone: () => void;
   onCancelForm: () => void;
 }) {
   const defaults = defaultTimes(defaultDate ?? new Date(), defaultStartHour, defaultEndHour);
+  const recurBaseDate = defaultDate ?? new Date();
+
+  const [entryType, setEntryType] = useState<EntryType>("single");
+  const [recurStartDate, setRecurStartDate] = useState(ymd(recurBaseDate));
+  const [recurStartTime, setRecurStartTime] = useState(
+    `${String(defaultStartHour ?? 9).padStart(2, "0")}:00`
+  );
+  const [recurEndTime, setRecurEndTime] = useState(
+    `${String(defaultEndHour ?? 10).padStart(2, "0")}:00`
+  );
+  const [weekdays, setWeekdays] = useState<number[]>([recurBaseDate.getDay()]);
+  const [monthDays, setMonthDays] = useState<number[]>([recurBaseDate.getDate()]);
+  const [yearDates, setYearDates] = useState<string[]>([ymd(recurBaseDate)]);
+  const [effectiveUntil, setEffectiveUntil] = useState("");
 
   const [customerName, setCustomerName] = useState(booking?.customer_name ?? "");
   const [phone, setPhone] = useState(booking?.phone ?? "");
@@ -123,6 +159,7 @@ export default function BookingForm({
     booking?.actual_drink_spend ?? 0
   );
   const [note, setNote] = useState(booking?.note ?? "");
+  const [seatNumber, setSeatNumber] = useState(booking?.seat_number ?? "");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<"form" | "review" | "success">("form");
@@ -204,16 +241,38 @@ export default function BookingForm({
     e.preventDefault();
     setError(null);
 
-    if (new Date(endTime) <= new Date(startTime)) {
-      setError("Giờ kết thúc phải sau giờ bắt đầu.");
-      return;
-    }
-    if (
-      vatInvoiceRequested &&
-      (!vatCompanyName.trim() || !vatCompanyAddress.trim() || !vatTaxCode.trim() || !vatEmail.trim())
-    ) {
-      setError("Nhập đủ thông tin xuất hoá đơn VAT (tên công ty, địa chỉ, mã số thuế, email).");
-      return;
+    if (entryType === "single") {
+      if (new Date(endTime) <= new Date(startTime)) {
+        setError("Giờ kết thúc phải sau giờ bắt đầu.");
+        return;
+      }
+      if (
+        vatInvoiceRequested &&
+        (!vatCompanyName.trim() || !vatCompanyAddress.trim() || !vatTaxCode.trim() || !vatEmail.trim())
+      ) {
+        setError("Nhập đủ thông tin xuất hoá đơn VAT (tên công ty, địa chỉ, mã số thuế, email).");
+        return;
+      }
+    } else {
+      if (recurEndTime <= recurStartTime) {
+        setError("Giờ kết thúc phải sau giờ bắt đầu.");
+        return;
+      }
+      if (entryType === "weekly" && weekdays.length === 0) {
+        setError("Chọn ít nhất 1 thứ trong tuần.");
+        return;
+      }
+      if (
+        (entryType === "monthly" || entryType === "quarterly") &&
+        monthDays.length === 0
+      ) {
+        setError("Chọn ít nhất 1 ngày trong tháng.");
+        return;
+      }
+      if (entryType === "yearly" && yearDates.length === 0) {
+        setError("Thêm ít nhất 1 ngày lặp lại mỗi năm.");
+        return;
+      }
     }
 
     setStep("review");
@@ -223,43 +282,77 @@ export default function BookingForm({
     setError(null);
     setLoading(true);
 
-    const input = {
-      location_id: location.id,
-      customer_name: customerName,
-      phone,
-      start_time: new Date(startTime).toISOString(),
-      end_time: new Date(endTime).toISOString(),
-      status,
-      deposit_amount: depositAmount,
-      discount_applied: discountApplied,
-      final_price: 0,
-      overage_fee: overageFee,
-      overage_fee_paid: booking?.overage_fee_paid ?? false,
-      minimum_spend_shortfall_paid: booking?.minimum_spend_shortfall_paid ?? false,
-      note,
-      org_type: orgType,
-      organization_name: orgType === "công ty/tổ chức" ? organizationName : null,
-      attendee_count: attendeeCount ? Number(attendeeCount) : null,
-      equipment_needed: equipmentNeeded,
-      equipment_note: equipmentNote,
-      pricing_rule_id: pricingRuleId,
-      vat_invoice_requested: vatInvoiceRequested,
-      vat_company_name: vatInvoiceRequested ? vatCompanyName : null,
-      vat_company_address: vatInvoiceRequested ? vatCompanyAddress : null,
-      vat_tax_code: vatInvoiceRequested ? vatTaxCode : null,
-      vat_email: vatInvoiceRequested ? vatEmail : null,
-      actual_drink_spend: actualDrinkSpend,
-    };
+    if (entryType === "single") {
+      const input = {
+        location_id: location.id,
+        customer_name: customerName,
+        phone,
+        start_time: new Date(startTime).toISOString(),
+        end_time: new Date(endTime).toISOString(),
+        status,
+        deposit_amount: depositAmount,
+        discount_applied: discountApplied,
+        final_price: 0,
+        overage_fee: overageFee,
+        overage_fee_paid: booking?.overage_fee_paid ?? false,
+        minimum_spend_shortfall_paid: booking?.minimum_spend_shortfall_paid ?? false,
+        note,
+        org_type: orgType,
+        organization_name: orgType === "công ty/tổ chức" ? organizationName : null,
+        attendee_count: attendeeCount ? Number(attendeeCount) : null,
+        equipment_needed: equipmentNeeded,
+        equipment_note: equipmentNote,
+        pricing_rule_id: pricingRuleId,
+        vat_invoice_requested: vatInvoiceRequested,
+        vat_company_name: vatInvoiceRequested ? vatCompanyName : null,
+        vat_company_address: vatInvoiceRequested ? vatCompanyAddress : null,
+        vat_tax_code: vatInvoiceRequested ? vatTaxCode : null,
+        vat_email: vatInvoiceRequested ? vatEmail : null,
+        actual_drink_spend: actualDrinkSpend,
+        seat_number: location.type === "ghế ngoài" ? seatNumber || null : null,
+      };
 
-    const result = booking
-      ? await updateBooking(booking.id, input)
-      : await createBooking(input);
+      const result = booking
+        ? await updateBooking(booking.id, input)
+        : await createBooking(input);
 
-    setLoading(false);
+      setLoading(false);
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+    } else {
+      const recurrenceType = entryTypeToRecurrenceType(entryType)!;
+
+      const input: FixedCustomerInput = {
+        location_id: location.id,
+        customer_name: customerName,
+        phone,
+        recurrence_type: recurrenceType,
+        weekday: recurrenceType === "hàng tuần" ? weekdays : null,
+        day_of_month:
+          recurrenceType === "hàng tháng" || recurrenceType === "hàng quý"
+            ? monthDays
+            : null,
+        custom_dates: recurrenceType === "hàng năm" ? yearDates : null,
+        start_time: recurStartTime,
+        end_time: recurEndTime,
+        effective_from: recurStartDate,
+        effective_until: effectiveUntil || null,
+        active: true,
+        deposit_amount: 0,
+        note,
+        seat_number: location.type === "ghế ngoài" ? seatNumber || null : null,
+      };
+
+      const result = await createFixedCustomer(input);
+      setLoading(false);
+
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
     }
 
     setStep("success");
@@ -286,11 +379,24 @@ export default function BookingForm({
         </div>
         <div>
           <p className="text-lg font-bold text-brand-forest">
-            {booking ? "Cập nhật đặt chỗ thành công!" : "Đặt lịch thành công!"}
+            {entryType === "single"
+              ? booking
+                ? "Cập nhật đặt chỗ thành công!"
+                : "Đặt lịch thành công!"
+              : "Đã tạo lịch định kỳ thành công!"}
           </p>
           <p className="mt-1 text-sm text-brand-forest/70">
-            Đã {booking ? "cập nhật" : "đặt chỗ cho"} &quot;{customerName}&quot; tại {location.name},{" "}
-            {formatLocalInput(startTime)} - {formatLocalInput(endTime)}.
+            {entryType === "single" ? (
+              <>
+                Đã {booking ? "cập nhật" : "đặt chỗ cho"} &quot;{customerName}&quot; tại{" "}
+                {location.name}, {formatLocalInput(startTime)} - {formatLocalInput(endTime)}.
+              </>
+            ) : (
+              <>
+                Đã tạo lịch định kỳ cho &quot;{customerName}&quot; tại {location.name} —{" "}
+                {recurrenceLabel(entryType, recurStartDate, weekdays, monthDays, yearDates)}.
+              </>
+            )}
           </p>
         </div>
         <button
@@ -311,60 +417,85 @@ export default function BookingForm({
         </p>
 
         <div className="rounded-lg border border-brand-forest/15 px-4">
+          <ReviewRow label="Kiểu đặt" value={entryTypeLabel(entryType)} />
           <ReviewRow label="Vị trí" value={location.name} />
           <ReviewRow label="Tên khách" value={customerName} />
-          <ReviewRow
-            label="Khách hàng là"
-            value={orgType === "công ty/tổ chức" ? "Công ty/Tổ chức" : "Cá nhân"}
-          />
-          {orgType === "công ty/tổ chức" && (
-            <ReviewRow label="Tên công ty/tổ chức" value={organizationName || "-"} />
+          {entryType === "single" && (
+            <>
+              <ReviewRow
+                label="Khách hàng là"
+                value={orgType === "công ty/tổ chức" ? "Công ty/Tổ chức" : "Cá nhân"}
+              />
+              {orgType === "công ty/tổ chức" && (
+                <ReviewRow label="Tên công ty/tổ chức" value={organizationName || "-"} />
+              )}
+            </>
           )}
           <ReviewRow label="Số điện thoại" value={phone || "-"} />
-          <ReviewRow label="Giờ bắt đầu" value={formatLocalInput(startTime)} />
-          <ReviewRow label="Giờ kết thúc" value={formatLocalInput(endTime)} />
-          <ReviewRow label="Số người tham gia" value={attendeeCount || "-"} />
-          <ReviewRow label="Hạng khách" value={customerType} />
-          <ReviewRow label="Giảm giá" value={`${discountApplied}%`} />
-          <ReviewRow label="Tiền cọc" value={`${depositAmount.toLocaleString("vi-VN")}đ`} />
-          {overageFee > 0 && (
-            <ReviewRow
-              label="Phụ thu thêm giờ"
-              value={`${overageFee.toLocaleString("vi-VN")}đ (vượt ${overageHours.toFixed(1)}h)`}
-            />
+          {location.type === "ghế ngoài" && (
+            <ReviewRow label="Số vị trí" value={seatNumber || "-"} />
           )}
-          {equipmentNeeded.length > 0 && (
-            <ReviewRow label="Thiết bị" value={equipmentNeeded.join(", ")} />
-          )}
-          {equipmentNote && <ReviewRow label="Thiết bị khác" value={equipmentNote} />}
-          {location.minimum_spend != null && location.minimum_spend > 0 && (
+          {entryType === "single" ? (
             <>
+              <ReviewRow label="Giờ bắt đầu" value={formatLocalInput(startTime)} />
+              <ReviewRow label="Giờ kết thúc" value={formatLocalInput(endTime)} />
+              <ReviewRow label="Số người tham gia" value={attendeeCount || "-"} />
+              <ReviewRow label="Hạng khách" value={customerType} />
+              <ReviewRow label="Giảm giá" value={`${discountApplied}%`} />
+              <ReviewRow label="Tiền cọc" value={`${depositAmount.toLocaleString("vi-VN")}đ`} />
+              {overageFee > 0 && (
+                <ReviewRow
+                  label="Phụ thu thêm giờ"
+                  value={`${overageFee.toLocaleString("vi-VN")}đ (vượt ${overageHours.toFixed(1)}h)`}
+                />
+              )}
+              {equipmentNeeded.length > 0 && (
+                <ReviewRow label="Thiết bị" value={equipmentNeeded.join(", ")} />
+              )}
+              {equipmentNote && <ReviewRow label="Thiết bị khác" value={equipmentNote} />}
+              {location.minimum_spend != null && location.minimum_spend > 0 && (
+                <>
+                  <ReviewRow
+                    label="Tiền đồ uống thực tế"
+                    value={`${actualDrinkSpend.toLocaleString("vi-VN")}đ`}
+                  />
+                  <ReviewRow
+                    label="Cần thanh toán thêm"
+                    value={`${Math.max(0, location.minimum_spend - actualDrinkSpend).toLocaleString("vi-VN")}đ`}
+                  />
+                </>
+              )}
               <ReviewRow
-                label="Tiền đồ uống thực tế"
-                value={`${actualDrinkSpend.toLocaleString("vi-VN")}đ`}
+                label="Xuất hoá đơn VAT"
+                value={vatInvoiceRequested ? "Có" : "Không"}
               />
+              {vatInvoiceRequested && (
+                <>
+                  <ReviewRow label="Tên công ty" value={vatCompanyName} />
+                  <ReviewRow label="Địa chỉ" value={vatCompanyAddress} />
+                  <ReviewRow label="Mã số thuế" value={vatTaxCode} />
+                  <ReviewRow label="Email" value={vatEmail} />
+                </>
+              )}
               <ReviewRow
-                label="Cần thanh toán thêm"
-                value={`${Math.max(0, location.minimum_spend - actualDrinkSpend).toLocaleString("vi-VN")}đ`}
+                label="Trạng thái"
+                value={status === "đã tới" ? "Đã tới" : status === "hủy" ? "Hủy" : "Đã đặt"}
               />
             </>
-          )}
-          <ReviewRow
-            label="Xuất hoá đơn VAT"
-            value={vatInvoiceRequested ? "Có" : "Không"}
-          />
-          {vatInvoiceRequested && (
+          ) : (
             <>
-              <ReviewRow label="Tên công ty" value={vatCompanyName} />
-              <ReviewRow label="Địa chỉ" value={vatCompanyAddress} />
-              <ReviewRow label="Mã số thuế" value={vatTaxCode} />
-              <ReviewRow label="Email" value={vatEmail} />
+              <ReviewRow label="Bắt đầu từ ngày" value={formatDateDMY(recurStartDate)} />
+              <ReviewRow
+                label="Lặp lại"
+                value={recurrenceLabel(entryType, recurStartDate, weekdays, monthDays, yearDates)}
+              />
+              <ReviewRow
+                label="Hiệu lực đến"
+                value={effectiveUntil ? formatDateDMY(effectiveUntil) : "Vô thời hạn"}
+              />
+              <ReviewRow label="Giờ" value={`${recurStartTime} - ${recurEndTime}`} />
             </>
           )}
-          <ReviewRow
-            label="Trạng thái"
-            value={status === "đã tới" ? "Đã tới" : status === "hủy" ? "Hủy" : "Đã đặt"}
-          />
           <ReviewRow label="Ghi chú" value={note || "-"} />
         </div>
 
@@ -400,6 +531,42 @@ export default function BookingForm({
         </p>
       )}
       <fieldset disabled={!canEdit} className="contents">
+      {!booking && (
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-brand-forest">
+            Kiểu đặt
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {ENTRY_TYPE_OPTIONS.filter((o) => !o.adminOnly || isAdmin).map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => {
+                  setEntryType(o.value);
+                  const recurrenceType = entryTypeToRecurrenceType(o.value);
+                  setEffectiveUntil(
+                    recurrenceType
+                      ? defaultEffectiveUntil(recurrenceType, recurStartDate) ?? ""
+                      : ""
+                  );
+                }}
+                className={`rounded-lg px-3 py-1.5 text-sm font-bold transition ${
+                  entryType === o.value
+                    ? "bg-brand-forest text-brand-cream"
+                    : "border border-brand-forest/30 text-brand-forest hover:bg-brand-cream"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {!isAdmin && (
+            <p className="mt-1.5 text-xs text-brand-forest/50">
+              Chỉ Quản lý (Admin) mới tạo được lịch đặt định kỳ.
+            </p>
+          )}
+        </div>
+      )}
       <div>
         <label className="mb-1 block text-sm font-medium text-brand-forest">
           Tên khách
@@ -412,7 +579,8 @@ export default function BookingForm({
         />
       </div>
 
-      {matchedPreferredCustomer &&
+      {entryType === "single" &&
+        matchedPreferredCustomer &&
         matchedPreferredCustomer.id !== appliedPreferredId &&
         matchedPreferredCustomer.id !== dismissedPreferredId && (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-amber bg-brand-amber/10 p-3">
@@ -446,40 +614,69 @@ export default function BookingForm({
           </div>
         )}
 
-      {matchedPreferredCustomer && matchedPreferredCustomer.id === appliedPreferredId && (
+      {entryType === "single" && matchedPreferredCustomer && matchedPreferredCustomer.id === appliedPreferredId && (
         <p className="text-xs font-medium text-brand-forest/70">
           ✓ Đã áp dụng hồ sơ khách {matchedPreferredCustomer.customer_type}:{" "}
           {matchedPreferredCustomer.name}
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div>
+        <label className="mb-1 block text-sm font-medium text-brand-forest">
+          Số điện thoại
+        </label>
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+        />
+      </div>
+
+      {location.type === "ghế ngoài" && (
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Khách hàng là
-          </label>
-          <select
-            value={orgType}
-            onChange={(e) => setOrgType(e.target.value as CustomerOrgType)}
-            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-          >
-            <option value="cá nhân">Cá nhân</option>
-            <option value="công ty/tổ chức">Công ty/Tổ chức</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Số điện thoại
+            Số vị trí
           </label>
           <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            value={seatNumber}
+            onChange={(e) => setSeatNumber(e.target.value)}
+            placeholder="VD: A12"
             className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
           />
         </div>
-      </div>
+      )}
 
-      {orgType === "công ty/tổ chức" && (
+      {entryType === "single" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-brand-forest">
+              Khách hàng là
+            </label>
+            <select
+              value={orgType}
+              onChange={(e) => setOrgType(e.target.value as CustomerOrgType)}
+              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+            >
+              <option value="cá nhân">Cá nhân</option>
+              <option value="công ty/tổ chức">Công ty/Tổ chức</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-brand-forest">
+              Số người tham gia
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={attendeeCount}
+              onChange={(e) => setAttendeeCount(e.target.value)}
+              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+            />
+          </div>
+        </div>
+      )}
+
+      {entryType === "single" && orgType === "công ty/tổ chức" && (
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Tên công ty/tổ chức
@@ -492,46 +689,121 @@ export default function BookingForm({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Giờ bắt đầu
-          </label>
-          <input
-            type="datetime-local"
-            required
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-          />
+      {entryType === "single" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-brand-forest">
+              Giờ bắt đầu
+            </label>
+            <input
+              type="datetime-local"
+              required
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-brand-forest">
+              Giờ kết thúc
+            </label>
+            <input
+              type="datetime-local"
+              required
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+            />
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Giờ kết thúc
-          </label>
-          <input
-            type="datetime-local"
-            required
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Số người tham gia
-          </label>
-          <input
-            type="number"
-            min={0}
-            value={attendeeCount}
-            onChange={(e) => setAttendeeCount(e.target.value)}
-            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-          />
-        </div>
-      </div>
+      )}
 
-      {location.minimum_spend != null && location.minimum_spend > 0 && (
+      {entryType !== "single" && (
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Bắt đầu từ ngày
+              </label>
+              <input
+                type="date"
+                required
+                value={recurStartDate}
+                onChange={(e) => setRecurStartDate(e.target.value)}
+                className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Giờ bắt đầu
+              </label>
+              <input
+                type="time"
+                required
+                value={recurStartTime}
+                onChange={(e) => setRecurStartTime(e.target.value)}
+                className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Giờ kết thúc
+              </label>
+              <input
+                type="time"
+                required
+                value={recurEndTime}
+                onChange={(e) => setRecurEndTime(e.target.value)}
+                className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+              />
+            </div>
+          </div>
+
+          {entryType === "weekly" && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Vào các thứ (có thể chọn nhiều)
+              </label>
+              <WeekdayPicker value={weekdays} onChange={setWeekdays} />
+            </div>
+          )}
+
+          {(entryType === "monthly" || entryType === "quarterly") && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Vào các ngày trong tháng (có thể chọn nhiều)
+              </label>
+              <DayOfMonthPicker value={monthDays} onChange={setMonthDays} />
+            </div>
+          )}
+
+          {entryType === "yearly" && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Các ngày lặp lại mỗi năm (chỉ lấy ngày/tháng, năm không quan trọng)
+              </label>
+              <DateListPicker value={yearDates} onChange={setYearDates} formatChip={formatDayMonth} />
+            </div>
+          )}
+
+          <p className="rounded-lg bg-brand-cream px-3 py-2 text-xs font-medium text-brand-forest">
+            {recurrenceLabel(entryType, recurStartDate, weekdays, monthDays, yearDates)}
+          </p>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-brand-forest">
+              Hiệu lực đến (để trống = vô thời hạn)
+            </label>
+            <input
+              type="date"
+              value={effectiveUntil}
+              onChange={(e) => setEffectiveUntil(e.target.value)}
+              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+            />
+          </div>
+        </>
+      )}
+
+      {entryType === "single" && location.minimum_spend != null && location.minimum_spend > 0 && (
         <div className="rounded-lg border border-brand-forest/15 bg-brand-cream/40 p-3">
           <p className="text-xs font-medium text-brand-forest">
             Mức chi tối thiểu đồ uống của vị trí này:{" "}
@@ -558,7 +830,7 @@ export default function BookingForm({
         </div>
       )}
 
-      {suggestedRules.length > 0 && (
+      {entryType === "single" && suggestedRules.length > 0 && (
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Chính sách giá gợi ý
@@ -600,51 +872,55 @@ export default function BookingForm({
         </div>
       )}
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-brand-forest">
-          Hạng khách (để tự điền % giảm giá)
-        </label>
-        <select
-          value={customerType}
-          onChange={(e) => applyCustomerType(e.target.value as CustomerType)}
-          className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-        >
-          <option value="thường">Thường</option>
-          <option value="VIP">VIP</option>
-          <option value="KOL">KOL</option>
-        </select>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {entryType === "single" && (
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Giảm giá (%)
+            Hạng khách (để tự điền % giảm giá)
           </label>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step="0.01"
-            value={discountApplied === 0 ? "" : discountApplied}
-            onChange={(e) =>
-              setDiscountApplied(e.target.value === "" ? 0 : Number(e.target.value))
-            }
+          <select
+            value={customerType}
+            onChange={(e) => applyCustomerType(e.target.value as CustomerType)}
             className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-          />
+          >
+            <option value="thường">Thường</option>
+            <option value="VIP">VIP</option>
+            <option value="KOL">KOL</option>
+          </select>
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Tiền cọc
-          </label>
-          <CurrencyInput
-            value={depositAmount}
-            onChange={setDepositAmount}
-            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-          />
-        </div>
-      </div>
+      )}
 
-      {overageHours > 0 && (
+      {entryType === "single" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-brand-forest">
+              Giảm giá (%)
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              value={discountApplied === 0 ? "" : discountApplied}
+              onChange={(e) =>
+                setDiscountApplied(e.target.value === "" ? 0 : Number(e.target.value))
+              }
+              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-brand-forest">
+              Tiền cọc
+            </label>
+            <CurrencyInput
+              value={depositAmount}
+              onChange={setDepositAmount}
+              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+            />
+          </div>
+        </div>
+      )}
+
+      {entryType === "single" && overageHours > 0 && (
         <p className="rounded-lg bg-brand-cream px-3 py-2 text-xs font-medium text-brand-forest">
           Thời lượng đặt chỗ vượt <span className="font-bold">{location.included_hours}h</span>{" "}
           quy định {overageHours.toFixed(1)}h — phụ thu thêm giờ tự tính:{" "}
@@ -652,36 +928,39 @@ export default function BookingForm({
         </p>
       )}
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-brand-forest">
-          Thiết bị cần chuẩn bị
-        </label>
-        <div className="flex flex-wrap gap-3">
-          {EQUIPMENT_OPTIONS.map((item) => (
-            <label
-              key={item}
-              className="flex items-center gap-1.5 rounded-lg border border-brand-forest/20 px-2 py-1 text-sm text-brand-forest"
-            >
-              <input
-                type="checkbox"
-                checked={equipmentNeeded.includes(item)}
-                onChange={() => toggleEquipment(item)}
-              />
-              {item}
-            </label>
-          ))}
-        </div>
-        <input
-          value={equipmentNote}
-          onChange={(e) => setEquipmentNote(e.target.value)}
-          placeholder="Thiết bị khác..."
-          className="mt-2 w-full rounded-lg border border-brand-forest/30 px-3 py-2 text-sm outline-none focus:border-brand-amber"
-        />
-      </div>
-
-      <div>
-        <label className="flex items-center gap-2 text-sm font-medium text-brand-forest">
+      {entryType === "single" && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-brand-forest">
+            Thiết bị cần chuẩn bị
+          </label>
+          <div className="flex flex-wrap gap-3">
+            {EQUIPMENT_OPTIONS.map((item) => (
+              <label
+                key={item}
+                className="flex items-center gap-1.5 rounded-lg border border-brand-forest/20 px-2 py-1 text-sm text-brand-forest"
+              >
+                <input
+                  type="checkbox"
+                  checked={equipmentNeeded.includes(item)}
+                  onChange={() => toggleEquipment(item)}
+                />
+                {item}
+              </label>
+            ))}
+          </div>
           <input
+            value={equipmentNote}
+            onChange={(e) => setEquipmentNote(e.target.value)}
+            placeholder="Thiết bị khác..."
+            className="mt-2 w-full rounded-lg border border-brand-forest/30 px-3 py-2 text-sm outline-none focus:border-brand-amber"
+          />
+        </div>
+      )}
+
+      {entryType === "single" && (
+        <div>
+          <label className="flex items-center gap-2 text-sm font-medium text-brand-forest">
+            <input
             type="checkbox"
             checked={vatInvoiceRequested}
             onChange={(e) => setVatInvoiceRequested(e.target.checked)}
@@ -737,22 +1016,25 @@ export default function BookingForm({
             </div>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-brand-forest">
-          Trạng thái
-        </label>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as BookingStatus)}
-          className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-        >
-          <option value="đã đặt">Đã đặt</option>
-          <option value="đã tới">Đã tới</option>
-          <option value="hủy">Hủy</option>
-        </select>
-      </div>
+      {entryType === "single" && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-brand-forest">
+            Trạng thái
+          </label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as BookingStatus)}
+            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+          >
+            <option value="đã đặt">Đã đặt</option>
+            <option value="đã tới">Đã tới</option>
+            <option value="hủy">Hủy</option>
+          </select>
+        </div>
+      )}
 
       <div>
         <label className="mb-1 block text-sm font-medium text-brand-forest">

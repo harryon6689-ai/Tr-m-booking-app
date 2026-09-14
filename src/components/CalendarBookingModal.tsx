@@ -9,7 +9,12 @@ import MonthCalendar, { ymd } from "@/components/calendar/MonthCalendar";
 import YearCalendar from "@/components/calendar/YearCalendar";
 import BookingForm from "@/components/BookingForm";
 import { PERIODS, type Period } from "@/lib/periods";
-import { expandFixedCustomerDates, overlapsFixedTime } from "@/lib/fixed-customers-utils";
+import {
+  expandFixedCustomerDates,
+  overlapsFixedTime,
+  needsRenewalReminder,
+  formatDateDMY,
+} from "@/lib/fixed-customers-utils";
 
 type Booking = Database["public"]["Tables"]["bookings"]["Row"];
 type Location = Database["public"]["Tables"]["locations"]["Row"];
@@ -35,6 +40,7 @@ interface CalendarBookingModalProps {
   pricingRules: PricingRule[];
   preferredCustomers: PreferredCustomer[];
   canEdit: boolean;
+  isAdmin: boolean;
   onClose: () => void;
 }
 
@@ -44,6 +50,7 @@ export default function CalendarBookingModal({
   pricingRules,
   preferredCustomers,
   canEdit,
+  isAdmin,
   onClose,
 }: CalendarBookingModalProps) {
   const now = new Date();
@@ -385,6 +392,11 @@ const fixedDatesForYear = useMemo(() => {
                         {rule.start_time.slice(0, 5)} - {rule.end_time.slice(0, 5)} · Khách
                         cố định
                       </span>
+                      {selectedDateStr && needsRenewalReminder(rule, selectedDateStr) && (
+                        <span className="block text-xs font-bold text-red-600">
+                          ⚠ Hết hạn {formatDateDMY(rule.effective_until)} — nhắc khách gia hạn
+                        </span>
+                      )}
                     </span>
                   </li>
                 ))}
@@ -463,6 +475,7 @@ const fixedDatesForYear = useMemo(() => {
             defaultStartHour={periodDefault?.startHour}
             defaultEndHour={periodDefault?.endHour}
             canEdit={canEdit}
+            isAdmin={isAdmin}
             onDone={() => {
               setDayMode("list");
               refetchYear();

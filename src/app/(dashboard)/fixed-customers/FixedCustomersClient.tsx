@@ -11,19 +11,19 @@ import {
 } from "@/lib/actions/fixed-customers";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import CurrencyInput from "@/components/CurrencyInput";
+import WeekdayPicker, { WEEKDAY_LABELS } from "@/components/WeekdayPicker";
+import DayOfMonthPicker from "@/components/DayOfMonthPicker";
+import DateListPicker from "@/components/DateListPicker";
+import {
+  defaultEffectiveUntil,
+  formatDateDMY,
+  formatDayMonth,
+  needsRenewalReminder,
+  ymd,
+} from "@/lib/fixed-customers-utils";
 
 type Location = Database["public"]["Tables"]["locations"]["Row"];
 type FixedCustomer = Database["public"]["Tables"]["fixed_customers"]["Row"];
-
-const WEEKDAY_LABELS = [
-  "Chủ nhật",
-  "Thứ 2",
-  "Thứ 3",
-  "Thứ 4",
-  "Thứ 5",
-  "Thứ 6",
-  "Thứ 7",
-];
 
 type RecurrenceFilter = "all" | RecurrenceType;
 
@@ -43,13 +43,13 @@ function formatMoney(n: number) {
 function describeRecurrence(rule: FixedCustomer): string {
   switch (rule.recurrence_type) {
     case "hàng tuần":
-      return `Hàng tuần - ${WEEKDAY_LABELS[rule.weekday ?? 0]}`;
+      return `Hàng tuần - ${(rule.weekday ?? []).map((w) => WEEKDAY_LABELS[w]).join(", ")}`;
     case "hàng tháng":
-      return `Hàng tháng - ngày ${rule.day_of_month}`;
+      return `Hàng tháng - ngày ${(rule.day_of_month ?? []).join(", ")}`;
     case "hàng quý":
-      return `Hàng quý - ngày ${rule.day_of_month}`;
+      return `Hàng quý - ngày ${(rule.day_of_month ?? []).join(", ")}`;
     case "hàng năm":
-      return `Hàng năm - ${rule.day_of_month}/${rule.month_of_year}`;
+      return `Hàng năm - ${(rule.custom_dates ?? []).map(formatDayMonth).join(", ")}`;
     case "ngày cụ thể":
       return `${(rule.custom_dates ?? []).length} ngày cụ thể`;
     default:
@@ -85,19 +85,34 @@ export default function FixedCustomersClient({
   const [recurrenceFilter, setRecurrenceFilter] = useState<RecurrenceFilter>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [nameQuery, setNameQuery] = useState("");
+  const today = ymd(new Date());
 
   const locationName = (id: string) =>
     locations.find((l) => l.id === id)?.name ?? "?";
 
-  const filteredCustomers = fixedCustomers.filter((rule) => {
-    if (recurrenceFilter !== "all" && rule.recurrence_type !== recurrenceFilter) {
-      return false;
-    }
-    if ((dateFrom || dateTo) && !overlapsDateRange(rule, dateFrom, dateTo)) {
-      return false;
-    }
-    return true;
-  });
+  const filteredCustomers = fixedCustomers
+    .filter((rule) => {
+      if (recurrenceFilter !== "all" && rule.recurrence_type !== recurrenceFilter) {
+        return false;
+      }
+      if ((dateFrom || dateTo) && !overlapsDateRange(rule, dateFrom, dateTo)) {
+        return false;
+      }
+      const q = nameQuery.trim().toLowerCase();
+      if (q && !rule.customer_name.toLowerCase().includes(q) && !(rule.phone ?? "").includes(q)) {
+        return false;
+      }
+      return true;
+    })
+    // Rules needing renewal float to the top so staff notice them first;
+    // everything else stays alphabetical for easy scanning.
+    .sort((a, b) => {
+      const aNeeds = needsRenewalReminder(a, today);
+      const bNeeds = needsRenewalReminder(b, today);
+      if (aNeeds !== bNeeds) return aNeeds ? -1 : 1;
+      return a.customer_name.localeCompare(b.customer_name, "vi");
+    });
 
   function openCreate() {
     setEditing(null);
@@ -111,10 +126,15 @@ export default function FixedCustomersClient({
 
   useEffect(() => {
     const editId = searchParams.get("edit");
-    if (!editId) return;
-    const rule = fixedCustomers.find((f) => f.id === editId);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- deep-link from check-in page opens the edit form
-    if (rule) openEdit(rule);
+    const renewId = searchParams.get("renew");
+    if (editId) {
+      const rule = fixedCustomers.find((f) => f.id === editId);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- deep-link from check-in page opens the edit form
+      if (rule) openEdit(rule);
+    } else if (renewId) {
+      const rule = fixedCustomers.find((f) => f.id === renewId);
+      if (rule) openRenew(rule);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only run for the deep-link param on mount
   }, [searchParams]);
 
@@ -128,9 +148,22 @@ export default function FixedCustomersClient({
     router.refresh();
   }
 
+  function openRenew(rule: FixedCustomer) {
+    // A renewal continues right after the old expiry — start fresh from the
+    // next day, with no end date yet, so staff just pick the new "kỳ" and the
+    // matching default "Hiệu lực đến" auto-fills (rest of the info is already
+    // pre-filled from the existing customer).
+    const nextDay = new Date(`${rule.effective_until}T00:00:00`);
+    nextDay.setDate(nextDay.getDate() + 1);
+    setEditing({ ...rule, effective_from: ymd(nextDay), effective_until: null });
+    setMode("form");
+  }
+
   function closeForm() {
     setMode("list");
-    if (searchParams.get("edit")) router.replace("/fixed-customers");
+    if (searchParams.get("edit") || searchParams.get("renew")) {
+      router.replace("/fixed-customers");
+    }
   }
 
   if (mode === "form") {
@@ -164,9 +197,10 @@ export default function FixedCustomersClient({
           filename="khach-co-dinh"
           sheetName="Khách cố định"
           rows={filteredCustomers.map((rule) => ({
-            "Vị trí": locationName(rule.location_id),
             "Khách hàng": rule.customer_name,
             SĐT: rule.phone ?? "",
+            "Vị trí": locationName(rule.location_id),
+            "Số vị trí": rule.seat_number ?? "",
             "Lặp lại": describeRecurrence(rule),
             Giờ: `${rule.start_time.slice(0, 5)} - ${rule.end_time.slice(0, 5)}`,
             "Hiệu lực từ": rule.effective_from,
@@ -178,6 +212,15 @@ export default function FixedCustomersClient({
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-brand-forest/15 bg-white p-4">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-brand-forest/70">Tìm khách/SĐT</label>
+          <input
+            value={nameQuery}
+            onChange={(e) => setNameQuery(e.target.value)}
+            placeholder="Tên hoặc SĐT"
+            className="rounded-lg border border-brand-forest/30 px-3 py-1.5 text-sm outline-none focus:border-brand-amber"
+          />
+        </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-brand-forest/70">Kiểu lặp lại</label>
           <select
@@ -210,13 +253,14 @@ export default function FixedCustomersClient({
             className="rounded-lg border border-brand-forest/30 px-3 py-1.5 text-sm outline-none focus:border-brand-amber"
           />
         </div>
-        {(recurrenceFilter !== "all" || dateFrom || dateTo) && (
+        {(recurrenceFilter !== "all" || dateFrom || dateTo || nameQuery) && (
           <button
             type="button"
             onClick={() => {
               setRecurrenceFilter("all");
               setDateFrom("");
               setDateTo("");
+              setNameQuery("");
             }}
             className="rounded-lg border border-brand-forest/30 px-3 py-1.5 text-sm font-semibold text-brand-forest hover:bg-brand-cream"
           >
@@ -229,10 +273,9 @@ export default function FixedCustomersClient({
         <table className="w-full text-left text-sm">
           <thead className="bg-brand-cream text-brand-forest/70">
             <tr>
-              <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Khách hàng</th>
-              <th className="whitespace-nowrap px-3 py-2 font-semibold">Lặp lại</th>
-              <th className="whitespace-nowrap px-3 py-2 font-semibold">Giờ</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Lịch lặp lại</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Hiệu lực</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Tiền cọc</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
@@ -240,63 +283,92 @@ export default function FixedCustomersClient({
             </tr>
           </thead>
           <tbody>
-            {filteredCustomers.map((rule) => (
-              <tr key={rule.id} className="border-t border-brand-forest/10">
-                <td className="px-3 py-2 text-brand-forest/80">
-                  {locationName(rule.location_id)}
-                </td>
-                <td className="px-3 py-2 font-medium text-brand-forest">
-                  {rule.customer_name}
-                  {rule.phone && (
-                    <span className="block text-xs text-brand-forest/60">
-                      {rule.phone}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-brand-forest/80">
-                  {describeRecurrence(rule)}
-                </td>
-                <td className="px-3 py-2 text-brand-forest/80">
-                  {rule.start_time.slice(0, 5)} - {rule.end_time.slice(0, 5)}
-                </td>
-                <td className="px-3 py-2 text-brand-forest/80">
-                  {rule.effective_from}
-                  {rule.effective_until ? ` → ${rule.effective_until}` : " → vô thời hạn"}
-                </td>
-                <td className="px-3 py-2 text-brand-forest/80">
-                  {rule.deposit_amount > 0 ? formatMoney(rule.deposit_amount) : "-"}
-                </td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      rule.active
-                        ? "bg-brand-forest/10 text-brand-forest"
-                        : "bg-gray-200 text-gray-600"
-                    }`}
-                  >
-                    {rule.active ? "Đang áp dụng" : "Tạm ngưng"}
-                  </span>
-                </td>
-                {isAdmin && (
-                  <td className="px-3 py-2">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => openEdit(rule)}
-                        className="text-xs font-semibold text-brand-forest hover:underline"
-                      >
-                        Sửa
-                      </button>
-                      <button
-                        onClick={() => handleDelete(rule.id)}
-                        className="text-xs font-semibold text-red-600 hover:underline"
-                      >
-                        Xóa
-                      </button>
-                    </div>
+            {filteredCustomers.map((rule) => {
+              const renewalDue = needsRenewalReminder(rule, today);
+              return (
+                <tr
+                  key={rule.id}
+                  className={`border-t border-brand-forest/10 ${renewalDue ? "bg-red-50/50" : ""}`}
+                >
+                  <td className="px-3 py-2 font-medium text-brand-forest">
+                    {rule.customer_name}
+                    {rule.phone && (
+                      <span className="block text-xs font-normal text-brand-forest/60">
+                        {rule.phone}
+                      </span>
+                    )}
                   </td>
-                )}
-              </tr>
-            ))}
+                  <td className="px-3 py-2 text-brand-forest/80">
+                    {locationName(rule.location_id)}
+                    {rule.seat_number && (
+                      <span className="block text-xs text-brand-forest/60">
+                        VT {rule.seat_number}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-brand-forest/80">
+                    {describeRecurrence(rule)}
+                    <span className="block text-xs text-brand-forest/50">
+                      {rule.start_time.slice(0, 5)} - {rule.end_time.slice(0, 5)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-brand-forest/80">
+                    {formatDateDMY(rule.effective_from)}
+                    {rule.effective_until
+                      ? ` → ${formatDateDMY(rule.effective_until)}`
+                      : " → vô thời hạn"}
+                    {renewalDue && (
+                      <div className="mt-1 flex flex-col items-start gap-1">
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
+                          ⚠ Sắp hết hạn — nhắc gia hạn
+                        </span>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => openRenew(rule)}
+                            className="rounded-lg border border-red-300 px-2 py-0.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                          >
+                            Gia hạn
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-brand-forest/80">
+                    {rule.deposit_amount > 0 ? formatMoney(rule.deposit_amount) : "-"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        rule.active
+                          ? "bg-brand-forest/10 text-brand-forest"
+                          : "bg-gray-200 text-gray-600"
+                      }`}
+                    >
+                      {rule.active ? "Đang áp dụng" : "Tạm ngưng"}
+                    </span>
+                  </td>
+                  {isAdmin && (
+                    <td className="px-3 py-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openEdit(rule)}
+                          className="text-xs font-semibold text-brand-forest hover:underline"
+                        >
+                          Sửa
+                        </button>
+                        <button
+                          onClick={() => handleDelete(rule.id)}
+                          className="text-xs font-semibold text-red-600 hover:underline"
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {filteredCustomers.length === 0 && (
@@ -328,11 +400,9 @@ function FixedCustomerForm({
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>(
     rule?.recurrence_type ?? "hàng tuần"
   );
-  const [weekday, setWeekday] = useState(rule?.weekday ?? 1);
-  const [dayOfMonth, setDayOfMonth] = useState(rule?.day_of_month ?? 1);
-  const [monthOfYear, setMonthOfYear] = useState(rule?.month_of_year ?? 1);
+  const [weekday, setWeekday] = useState<number[]>(rule?.weekday ?? [1]);
+  const [daysOfMonth, setDaysOfMonth] = useState<number[]>(rule?.day_of_month ?? []);
   const [customDates, setCustomDates] = useState<string[]>(rule?.custom_dates ?? []);
-  const [newDate, setNewDate] = useState("");
   const [startTime, setStartTime] = useState(rule?.start_time.slice(0, 5) ?? "09:00");
   const [endTime, setEndTime] = useState(rule?.end_time.slice(0, 5) ?? "11:00");
   const [effectiveFrom, setEffectiveFrom] = useState(
@@ -342,19 +412,11 @@ function FixedCustomerForm({
   const [depositAmount, setDepositAmount] = useState(rule?.deposit_amount ?? 0);
   const [active, setActive] = useState(rule?.active ?? true);
   const [note, setNote] = useState(rule?.note ?? "");
+  const [seatNumber, setSeatNumber] = useState(rule?.seat_number ?? "");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function addCustomDate() {
-    if (newDate && !customDates.includes(newDate)) {
-      setCustomDates([...customDates, newDate].sort());
-      setNewDate("");
-    }
-  }
-
-  function removeCustomDate(d: string) {
-    setCustomDates(customDates.filter((x) => x !== d));
-  }
+  const selectedLocation = locations.find((l) => l.id === locationId);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -364,8 +426,26 @@ function FixedCustomerForm({
       setError("Giờ kết thúc phải sau giờ bắt đầu.");
       return;
     }
-    if (recurrenceType === "ngày cụ thể" && customDates.length === 0) {
-      setError("Thêm ít nhất 1 ngày cụ thể.");
+    if (
+      (recurrenceType === "ngày cụ thể" || recurrenceType === "hàng năm") &&
+      customDates.length === 0
+    ) {
+      setError(
+        recurrenceType === "hàng năm"
+          ? "Thêm ít nhất 1 ngày lặp lại mỗi năm."
+          : "Thêm ít nhất 1 ngày cụ thể."
+      );
+      return;
+    }
+    if (recurrenceType === "hàng tuần" && weekday.length === 0) {
+      setError("Chọn ít nhất 1 thứ trong tuần.");
+      return;
+    }
+    if (
+      (recurrenceType === "hàng tháng" || recurrenceType === "hàng quý") &&
+      daysOfMonth.length === 0
+    ) {
+      setError("Chọn ít nhất 1 ngày trong tháng.");
       return;
     }
 
@@ -378,13 +458,13 @@ function FixedCustomerForm({
       recurrence_type: recurrenceType,
       weekday: recurrenceType === "hàng tuần" ? weekday : null,
       day_of_month:
-        recurrenceType === "hàng tháng" ||
-        recurrenceType === "hàng quý" ||
-        recurrenceType === "hàng năm"
-          ? dayOfMonth
+        recurrenceType === "hàng tháng" || recurrenceType === "hàng quý"
+          ? daysOfMonth
           : null,
-      month_of_year: recurrenceType === "hàng năm" ? monthOfYear : null,
-      custom_dates: recurrenceType === "ngày cụ thể" ? customDates : null,
+      custom_dates:
+        recurrenceType === "ngày cụ thể" || recurrenceType === "hàng năm"
+          ? customDates
+          : null,
       start_time: startTime,
       end_time: endTime,
       effective_from: effectiveFrom,
@@ -392,6 +472,7 @@ function FixedCustomerForm({
       active,
       deposit_amount: depositAmount,
       note,
+      seat_number: selectedLocation?.type === "ghế ngoài" ? seatNumber || null : null,
     };
 
     const result = rule
@@ -430,7 +511,21 @@ function FixedCustomerForm({
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {selectedLocation?.type === "ghế ngoài" && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-brand-forest">
+            Số vị trí
+          </label>
+          <input
+            value={seatNumber}
+            onChange={(e) => setSeatNumber(e.target.value)}
+            placeholder="VD: A12"
+            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+          />
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Tên khách
@@ -460,7 +555,11 @@ function FixedCustomerForm({
         </label>
         <select
           value={recurrenceType}
-          onChange={(e) => setRecurrenceType(e.target.value as RecurrenceType)}
+          onChange={(e) => {
+            const newType = e.target.value as RecurrenceType;
+            setRecurrenceType(newType);
+            setEffectiveUntil(defaultEffectiveUntil(newType, effectiveFrom) ?? "");
+          }}
           className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
         >
           <option value="hàng tuần">Hàng tuần</option>
@@ -474,126 +573,47 @@ function FixedCustomerForm({
       {recurrenceType === "hàng tuần" && (
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Vào thứ
+            Vào các thứ (có thể chọn nhiều)
           </label>
-          <select
-            value={weekday}
-            onChange={(e) => setWeekday(Number(e.target.value))}
-            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-          >
-            {WEEKDAY_LABELS.map((label, i) => (
-              <option key={i} value={i}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <WeekdayPicker value={weekday} onChange={setWeekday} />
         </div>
       )}
 
       {recurrenceType === "hàng tháng" && (
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Vào ngày (1-31)
+            Vào các ngày trong tháng (có thể chọn nhiều)
           </label>
-          <input
-            type="number"
-            min={1}
-            max={31}
-            value={dayOfMonth}
-            onChange={(e) => setDayOfMonth(Number(e.target.value))}
-            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-          />
+          <DayOfMonthPicker value={daysOfMonth} onChange={setDaysOfMonth} />
         </div>
       )}
 
       {recurrenceType === "hàng quý" && (
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Vào ngày (1-31), lặp lại mỗi 3 tháng kể từ ngày hiệu lực
+            Vào các ngày trong tháng (có thể chọn nhiều), lặp lại mỗi 3 tháng kể từ
+            ngày hiệu lực
           </label>
-          <input
-            type="number"
-            min={1}
-            max={31}
-            value={dayOfMonth}
-            onChange={(e) => setDayOfMonth(Number(e.target.value))}
-            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+          <DayOfMonthPicker value={daysOfMonth} onChange={setDaysOfMonth} />
+        </div>
+      )}
+
+      {(recurrenceType === "ngày cụ thể" || recurrenceType === "hàng năm") && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-brand-forest">
+            {recurrenceType === "hàng năm"
+              ? "Các ngày lặp lại mỗi năm (chỉ lấy ngày/tháng, năm không quan trọng)"
+              : "Danh sách ngày"}
+          </label>
+          <DateListPicker
+            value={customDates}
+            onChange={setCustomDates}
+            formatChip={recurrenceType === "hàng năm" ? formatDayMonth : undefined}
           />
         </div>
       )}
 
-      {recurrenceType === "hàng năm" && (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-brand-forest">
-              Ngày (1-31)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={31}
-              value={dayOfMonth}
-              onChange={(e) => setDayOfMonth(Number(e.target.value))}
-              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-brand-forest">
-              Tháng (1-12)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={12}
-              value={monthOfYear}
-              onChange={(e) => setMonthOfYear(Number(e.target.value))}
-              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-            />
-          </div>
-        </div>
-      )}
-
-      {recurrenceType === "ngày cụ thể" && (
-        <div>
-          <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Danh sách ngày
-          </label>
-          <div className="mb-2 flex gap-2">
-            <input
-              type="date"
-              value={newDate}
-              onChange={(e) => setNewDate(e.target.value)}
-              className="rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-            />
-            <button
-              type="button"
-              onClick={addCustomDate}
-              className="rounded-lg border border-brand-forest/30 px-3 py-2 text-sm font-medium text-brand-forest hover:bg-brand-cream"
-            >
-              + Thêm
-            </button>
-          </div>
-          <ul className="flex flex-wrap gap-2">
-            {customDates.map((d) => (
-              <li
-                key={d}
-                className="flex items-center gap-1 rounded-full bg-brand-cream px-2 py-1 text-xs text-brand-forest"
-              >
-                {d}
-                <button
-                  type="button"
-                  onClick={() => removeCustomDate(d)}
-                  className="text-brand-forest/60 hover:text-red-600"
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Giờ bắt đầu
@@ -620,7 +640,7 @@ function FixedCustomerForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Hiệu lực từ
