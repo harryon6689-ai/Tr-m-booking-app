@@ -75,6 +75,9 @@ export interface Database {
           capacity: number;
           equipment: string | null;
           display_order: number;
+          minimum_spend: number | null;
+          included_hours: number;
+          overage_fee_per_hour: number | null;
           created_at: string;
         };
         Insert: {
@@ -84,6 +87,9 @@ export interface Database {
           capacity: number;
           equipment?: string | null;
           display_order?: number;
+          minimum_spend?: number | null;
+          included_hours?: number;
+          overage_fee_per_hour?: number | null;
           created_at?: string;
         };
         Update: {
@@ -93,6 +99,9 @@ export interface Database {
           capacity?: number;
           equipment?: string | null;
           display_order?: number;
+          minimum_spend?: number | null;
+          included_hours?: number;
+          overage_fee_per_hour?: number | null;
           created_at?: string;
         };
         Relationships: [];
@@ -118,6 +127,14 @@ export interface Database {
           pricing_rule_id: string | null;
           deposit_refunded: boolean;
           overage_fee: number;
+          vat_invoice_requested: boolean;
+          vat_company_name: string | null;
+          vat_company_address: string | null;
+          vat_tax_code: string | null;
+          vat_email: string | null;
+          actual_drink_spend: number | null;
+          overage_fee_paid: boolean;
+          minimum_spend_shortfall_paid: boolean;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -142,6 +159,14 @@ export interface Database {
           pricing_rule_id?: string | null;
           deposit_refunded?: boolean;
           overage_fee?: number;
+          vat_invoice_requested?: boolean;
+          vat_company_name?: string | null;
+          vat_company_address?: string | null;
+          vat_tax_code?: string | null;
+          vat_email?: string | null;
+          actual_drink_spend?: number | null;
+          overage_fee_paid?: boolean;
+          minimum_spend_shortfall_paid?: boolean;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -166,6 +191,14 @@ export interface Database {
           pricing_rule_id?: string | null;
           deposit_refunded?: boolean;
           overage_fee?: number;
+          vat_invoice_requested?: boolean;
+          vat_company_name?: string | null;
+          vat_company_address?: string | null;
+          vat_tax_code?: string | null;
+          vat_email?: string | null;
+          actual_drink_spend?: number | null;
+          overage_fee_paid?: boolean;
+          minimum_spend_shortfall_paid?: boolean;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;

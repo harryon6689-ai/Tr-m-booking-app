@@ -10,6 +10,7 @@ import type {
 import { EQUIPMENT_OPTIONS } from "@/lib/types/database";
 import { createBooking, updateBooking, cancelBooking } from "@/lib/actions/bookings";
 import CurrencyInput from "@/components/CurrencyInput";
+import ReviewRow from "@/components/ReviewRow";
 import {
   formatPricingRule,
   formatAttendeeRange,
@@ -29,6 +30,18 @@ function toLocalInput(iso: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
     d.getHours()
   )}:${pad(d.getMinutes())}`;
+}
+
+function formatLocalInput(value: string) {
+  if (!value) return "-";
+  const d = new Date(value);
+  return d.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function defaultTimes(baseDate: Date, startHour = 9, endHour = 10) {
@@ -89,7 +102,6 @@ export default function BookingForm({
     booking?.discount_applied ?? 0
   );
   const [depositAmount, setDepositAmount] = useState(booking?.deposit_amount ?? 0);
-  const [finalPrice, setFinalPrice] = useState(booking?.final_price ?? 0);
   const [pricingRuleId, setPricingRuleId] = useState<string | null>(
     booking?.pricing_rule_id ?? null
   );
@@ -98,9 +110,22 @@ export default function BookingForm({
   );
   const [equipmentNote, setEquipmentNote] = useState(booking?.equipment_note ?? "");
   const [status, setStatus] = useState<BookingStatus>(booking?.status ?? "đã đặt");
+  const [vatInvoiceRequested, setVatInvoiceRequested] = useState(
+    booking?.vat_invoice_requested ?? false
+  );
+  const [vatCompanyName, setVatCompanyName] = useState(booking?.vat_company_name ?? "");
+  const [vatCompanyAddress, setVatCompanyAddress] = useState(
+    booking?.vat_company_address ?? ""
+  );
+  const [vatTaxCode, setVatTaxCode] = useState(booking?.vat_tax_code ?? "");
+  const [vatEmail, setVatEmail] = useState(booking?.vat_email ?? "");
+  const [actualDrinkSpend, setActualDrinkSpend] = useState(
+    booking?.actual_drink_spend ?? 0
+  );
   const [note, setNote] = useState(booking?.note ?? "");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<"form" | "review" | "success">("form");
   const [appliedPreferredId, setAppliedPreferredId] = useState<string | null>(null);
   const [dismissedPreferredId, setDismissedPreferredId] = useState<string | null>(null);
 
@@ -163,13 +188,19 @@ export default function BookingForm({
     attendeeCount ? Number(attendeeCount) : null
   );
 
+  const durationHours =
+    startTime && endTime
+      ? Math.max(0, (new Date(endTime).getTime() - new Date(startTime).getTime()) / 3_600_000)
+      : 0;
+  const overageHours = Math.max(0, durationHours - location.included_hours);
+  const overageFee =
+    overageHours > 0 ? overageHours * (location.overage_fee_per_hour ?? 0) : 0;
+
   function applyPricingRule(rule: PricingRule) {
-    const suggested = computeSuggestedPrice(rule, startTime, endTime);
-    setFinalPrice(suggested);
     setPricingRuleId(rule.id);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleContinue(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
@@ -177,7 +208,19 @@ export default function BookingForm({
       setError("Giờ kết thúc phải sau giờ bắt đầu.");
       return;
     }
+    if (
+      vatInvoiceRequested &&
+      (!vatCompanyName.trim() || !vatCompanyAddress.trim() || !vatTaxCode.trim() || !vatEmail.trim())
+    ) {
+      setError("Nhập đủ thông tin xuất hoá đơn VAT (tên công ty, địa chỉ, mã số thuế, email).");
+      return;
+    }
 
+    setStep("review");
+  }
+
+  async function handleConfirm() {
+    setError(null);
     setLoading(true);
 
     const input = {
@@ -189,7 +232,10 @@ export default function BookingForm({
       status,
       deposit_amount: depositAmount,
       discount_applied: discountApplied,
-      final_price: finalPrice,
+      final_price: 0,
+      overage_fee: overageFee,
+      overage_fee_paid: booking?.overage_fee_paid ?? false,
+      minimum_spend_shortfall_paid: booking?.minimum_spend_shortfall_paid ?? false,
       note,
       org_type: orgType,
       organization_name: orgType === "công ty/tổ chức" ? organizationName : null,
@@ -197,6 +243,12 @@ export default function BookingForm({
       equipment_needed: equipmentNeeded,
       equipment_note: equipmentNote,
       pricing_rule_id: pricingRuleId,
+      vat_invoice_requested: vatInvoiceRequested,
+      vat_company_name: vatInvoiceRequested ? vatCompanyName : null,
+      vat_company_address: vatInvoiceRequested ? vatCompanyAddress : null,
+      vat_tax_code: vatInvoiceRequested ? vatTaxCode : null,
+      vat_email: vatInvoiceRequested ? vatEmail : null,
+      actual_drink_spend: actualDrinkSpend,
     };
 
     const result = booking
@@ -210,7 +262,7 @@ export default function BookingForm({
       return;
     }
 
-    onDone();
+    setStep("success");
   }
 
   async function handleCancelBooking() {
@@ -226,8 +278,122 @@ export default function BookingForm({
     onDone();
   }
 
+  if (step === "success") {
+    return (
+      <div className="flex flex-col items-center gap-4 p-4 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-forest/10 text-3xl text-brand-forest">
+          ✓
+        </div>
+        <div>
+          <p className="text-lg font-bold text-brand-forest">
+            {booking ? "Cập nhật đặt chỗ thành công!" : "Đặt lịch thành công!"}
+          </p>
+          <p className="mt-1 text-sm text-brand-forest/70">
+            Đã {booking ? "cập nhật" : "đặt chỗ cho"} &quot;{customerName}&quot; tại {location.name},{" "}
+            {formatLocalInput(startTime)} - {formatLocalInput(endTime)}.
+          </p>
+        </div>
+        <button
+          onClick={onDone}
+          className="rounded-lg bg-brand-amber px-5 py-2 font-bold text-white hover:bg-brand-amber/90"
+        >
+          Đóng
+        </button>
+      </div>
+    );
+  }
+
+  if (step === "review") {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm font-medium text-brand-forest/70">
+          Kiểm tra lại thông tin trước khi xác nhận
+        </p>
+
+        <div className="rounded-lg border border-brand-forest/15 px-4">
+          <ReviewRow label="Vị trí" value={location.name} />
+          <ReviewRow label="Tên khách" value={customerName} />
+          <ReviewRow
+            label="Khách hàng là"
+            value={orgType === "công ty/tổ chức" ? "Công ty/Tổ chức" : "Cá nhân"}
+          />
+          {orgType === "công ty/tổ chức" && (
+            <ReviewRow label="Tên công ty/tổ chức" value={organizationName || "-"} />
+          )}
+          <ReviewRow label="Số điện thoại" value={phone || "-"} />
+          <ReviewRow label="Giờ bắt đầu" value={formatLocalInput(startTime)} />
+          <ReviewRow label="Giờ kết thúc" value={formatLocalInput(endTime)} />
+          <ReviewRow label="Số người tham gia" value={attendeeCount || "-"} />
+          <ReviewRow label="Hạng khách" value={customerType} />
+          <ReviewRow label="Giảm giá" value={`${discountApplied}%`} />
+          <ReviewRow label="Tiền cọc" value={`${depositAmount.toLocaleString("vi-VN")}đ`} />
+          {overageFee > 0 && (
+            <ReviewRow
+              label="Phụ thu thêm giờ"
+              value={`${overageFee.toLocaleString("vi-VN")}đ (vượt ${overageHours.toFixed(1)}h)`}
+            />
+          )}
+          {equipmentNeeded.length > 0 && (
+            <ReviewRow label="Thiết bị" value={equipmentNeeded.join(", ")} />
+          )}
+          {equipmentNote && <ReviewRow label="Thiết bị khác" value={equipmentNote} />}
+          {location.minimum_spend != null && location.minimum_spend > 0 && (
+            <>
+              <ReviewRow
+                label="Tiền đồ uống thực tế"
+                value={`${actualDrinkSpend.toLocaleString("vi-VN")}đ`}
+              />
+              <ReviewRow
+                label="Cần thanh toán thêm"
+                value={`${Math.max(0, location.minimum_spend - actualDrinkSpend).toLocaleString("vi-VN")}đ`}
+              />
+            </>
+          )}
+          <ReviewRow
+            label="Xuất hoá đơn VAT"
+            value={vatInvoiceRequested ? "Có" : "Không"}
+          />
+          {vatInvoiceRequested && (
+            <>
+              <ReviewRow label="Tên công ty" value={vatCompanyName} />
+              <ReviewRow label="Địa chỉ" value={vatCompanyAddress} />
+              <ReviewRow label="Mã số thuế" value={vatTaxCode} />
+              <ReviewRow label="Email" value={vatEmail} />
+            </>
+          )}
+          <ReviewRow
+            label="Trạng thái"
+            value={status === "đã tới" ? "Đã tới" : status === "hủy" ? "Hủy" : "Đã đặt"}
+          />
+          <ReviewRow label="Ghi chú" value={note || "-"} />
+        </div>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <div className="mt-2 flex justify-between">
+          <button
+            type="button"
+            onClick={() => setStep("form")}
+            disabled={loading}
+            className="rounded-lg border border-brand-forest/30 px-4 py-2 font-medium text-brand-forest hover:bg-brand-cream disabled:opacity-60"
+          >
+            Sửa lại
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={loading || !canEdit}
+            className="rounded-lg bg-brand-amber px-5 py-2 font-bold text-white hover:bg-brand-amber/90 disabled:opacity-60"
+          >
+            {loading ? "Đang lưu..." : "Xác nhận"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+    <form onSubmit={handleContinue} className="flex flex-col gap-3">
       {!canEdit && (
         <p className="rounded-lg bg-brand-forest/10 px-3 py-2 text-xs font-medium text-brand-forest/70">
           Tài khoản chỉ xem — bạn có thể xem chi tiết nhưng không thể tạo/sửa/hủy đặt chỗ.
@@ -365,6 +531,33 @@ export default function BookingForm({
         </div>
       </div>
 
+      {location.minimum_spend != null && location.minimum_spend > 0 && (
+        <div className="rounded-lg border border-brand-forest/15 bg-brand-cream/40 p-3">
+          <p className="text-xs font-medium text-brand-forest">
+            Mức chi tối thiểu đồ uống của vị trí này:{" "}
+            <span className="font-bold">
+              {location.minimum_spend.toLocaleString("vi-VN")}đ
+            </span>
+          </p>
+          <div className="mt-2">
+            <label className="mb-1 block text-sm font-medium text-brand-forest">
+              Tổng tiền khách đã thanh toán đồ uống
+            </label>
+            <CurrencyInput
+              value={actualDrinkSpend}
+              onChange={setActualDrinkSpend}
+              className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+            />
+          </div>
+          {actualDrinkSpend < location.minimum_spend && (
+            <p className="mt-2 text-sm font-bold text-red-600">
+              Khách cần thanh toán thêm:{" "}
+              {(location.minimum_spend - actualDrinkSpend).toLocaleString("vi-VN")}đ
+            </p>
+          )}
+        </div>
+      )}
+
       {suggestedRules.length > 0 && (
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
@@ -422,7 +615,7 @@ export default function BookingForm({
         </select>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
             Giảm giá (%)
@@ -432,8 +625,10 @@ export default function BookingForm({
             min={0}
             max={100}
             step="0.01"
-            value={discountApplied}
-            onChange={(e) => setDiscountApplied(Number(e.target.value))}
+            value={discountApplied === 0 ? "" : discountApplied}
+            onChange={(e) =>
+              setDiscountApplied(e.target.value === "" ? 0 : Number(e.target.value))
+            }
             className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
           />
         </div>
@@ -447,17 +642,15 @@ export default function BookingForm({
             className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
           />
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-brand-forest">
-            Giá cuối
-          </label>
-          <CurrencyInput
-            value={finalPrice}
-            onChange={setFinalPrice}
-            className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-          />
-        </div>
       </div>
+
+      {overageHours > 0 && (
+        <p className="rounded-lg bg-brand-cream px-3 py-2 text-xs font-medium text-brand-forest">
+          Thời lượng đặt chỗ vượt <span className="font-bold">{location.included_hours}h</span>{" "}
+          quy định {overageHours.toFixed(1)}h — phụ thu thêm giờ tự tính:{" "}
+          <span className="font-bold">{overageFee.toLocaleString("vi-VN")}đ</span>.
+        </p>
+      )}
 
       <div>
         <label className="mb-1 block text-sm font-medium text-brand-forest">
@@ -484,6 +677,66 @@ export default function BookingForm({
           placeholder="Thiết bị khác..."
           className="mt-2 w-full rounded-lg border border-brand-forest/30 px-3 py-2 text-sm outline-none focus:border-brand-amber"
         />
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2 text-sm font-medium text-brand-forest">
+          <input
+            type="checkbox"
+            checked={vatInvoiceRequested}
+            onChange={(e) => setVatInvoiceRequested(e.target.checked)}
+          />
+          Xuất hoá đơn VAT
+        </label>
+        {vatInvoiceRequested && (
+          <div className="mt-2 grid grid-cols-1 gap-3 rounded-lg border border-brand-forest/15 bg-brand-cream/40 p-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Tên công ty
+              </label>
+              <input
+                required={vatInvoiceRequested}
+                value={vatCompanyName}
+                onChange={(e) => setVatCompanyName(e.target.value)}
+                className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Mã số thuế
+              </label>
+              <input
+                required={vatInvoiceRequested}
+                value={vatTaxCode}
+                onChange={(e) => setVatTaxCode(e.target.value)}
+                className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Địa chỉ
+              </label>
+              <input
+                required={vatInvoiceRequested}
+                value={vatCompanyAddress}
+                onChange={(e) => setVatCompanyAddress(e.target.value)}
+                className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-brand-forest">
+                Địa chỉ Email
+              </label>
+              <input
+                type="email"
+                required={vatInvoiceRequested}
+                value={vatEmail}
+                onChange={(e) => setVatEmail(e.target.value)}
+                className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div>
@@ -542,7 +795,7 @@ export default function BookingForm({
               disabled={loading}
               className="rounded-lg bg-brand-amber px-4 py-2 font-medium text-white hover:bg-brand-amber/90 disabled:opacity-60"
             >
-              {loading ? "Đang lưu..." : "Lưu"}
+              Tiếp tục
             </button>
           </div>
         )}

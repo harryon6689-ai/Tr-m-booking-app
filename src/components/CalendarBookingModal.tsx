@@ -463,7 +463,10 @@ const fixedDatesForYear = useMemo(() => {
             defaultStartHour={periodDefault?.startHour}
             defaultEndHour={periodDefault?.endHour}
             canEdit={canEdit}
-            onDone={() => setDayMode("list")}
+            onDone={() => {
+              setDayMode("list");
+              refetchYear();
+            }}
             onCancelForm={() => setDayMode("list")}
           />
         )}

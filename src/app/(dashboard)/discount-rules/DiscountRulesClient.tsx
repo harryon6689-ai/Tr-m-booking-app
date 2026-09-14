@@ -10,25 +10,29 @@ import {
   setPricingRuleActive,
   type PricingRuleInput,
 } from "@/lib/actions/pricing-rules";
+import { updateLocationPolicy } from "@/lib/actions/locations";
 import CurrencyInput from "@/components/CurrencyInput";
 import { formatPricingRule, formatAttendeeRange } from "@/lib/pricing-rules-utils";
 import ExportExcelButton from "@/components/ExportExcelButton";
 
 type DiscountRule = Database["public"]["Tables"]["discount_rules"]["Row"];
 type PricingRule = Database["public"]["Tables"]["pricing_rules"]["Row"];
+type Location = Database["public"]["Tables"]["locations"]["Row"];
 
 interface DiscountRulesClientProps {
   discountRules: DiscountRule[];
   pricingRules: PricingRule[];
+  locations: Location[];
   isAdmin: boolean;
 }
 
 export default function DiscountRulesClient({
   discountRules,
   pricingRules,
+  locations,
   isAdmin,
 }: DiscountRulesClientProps) {
-  const [tab, setTab] = useState<"discount" | "pricing">("discount");
+  const [tab, setTab] = useState<"discount" | "pricing" | "minimum-spend">("discount");
 
   return (
     <div className="flex flex-col gap-4">
@@ -49,13 +53,161 @@ export default function DiscountRulesClient({
         >
           Giá phòng/chỗ
         </button>
+        <button
+          onClick={() => setTab("minimum-spend")}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
+            tab === "minimum-spend" ? "bg-brand-forest text-brand-cream" : "text-brand-forest"
+          }`}
+        >
+          Mức chi tối thiểu &amp; Phụ thu giờ
+        </button>
       </div>
 
       {tab === "discount" ? (
         <DiscountPercentTable discountRules={discountRules} isAdmin={isAdmin} />
-      ) : (
+      ) : tab === "pricing" ? (
         <PricingRulesPanel pricingRules={pricingRules} isAdmin={isAdmin} />
+      ) : (
+        <MinimumSpendPanel locations={locations} isAdmin={isAdmin} />
       )}
+    </div>
+  );
+}
+
+function formatMoney(n: number) {
+  return n.toLocaleString("vi-VN") + "đ";
+}
+
+interface PolicyDraft {
+  minimumSpend: number;
+  includedHours: number;
+  overageFeePerHour: number;
+}
+
+function MinimumSpendPanel({
+  locations,
+  isAdmin,
+}: {
+  locations: Location[];
+  isAdmin: boolean;
+}) {
+  const router = useRouter();
+  const [drafts, setDrafts] = useState<Record<string, PolicyDraft>>(
+    Object.fromEntries(
+      locations.map((l) => [
+        l.id,
+        {
+          minimumSpend: l.minimum_spend ?? 0,
+          includedHours: l.included_hours,
+          overageFeePerHour: l.overage_fee_per_hour ?? 0,
+        },
+      ])
+    )
+  );
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  function updateDraft(locationId: string, patch: Partial<PolicyDraft>) {
+    setDrafts((d) => ({ ...d, [locationId]: { ...d[locationId], ...patch } }));
+  }
+
+  async function handleSave(locationId: string) {
+    setSavingId(locationId);
+    const draft = drafts[locationId];
+    const result = await updateLocationPolicy(locationId, {
+      minimumSpend: draft.minimumSpend > 0 ? draft.minimumSpend : null,
+      includedHours: draft.includedHours,
+      overageFeePerHour: draft.overageFeePerHour > 0 ? draft.overageFeePerHour : null,
+    });
+    setSavingId(null);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-sm text-brand-forest/60">
+        Mức chi tối thiểu (đồ uống) cho từng vị trí, dùng trong số giờ quy định — quá số
+        giờ đó sẽ tự tính phụ thu thêm giờ. Để trống mức chi tối thiểu hoặc phụ thu/giờ
+        (0đ) nghĩa là vị trí đó không áp dụng phần tương ứng.
+      </p>
+      <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-brand-cream text-brand-forest/70">
+            <tr>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Loại</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Mức chi tối thiểu</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Số giờ quy định</th>
+              <th className="whitespace-nowrap px-3 py-2 font-semibold">Phụ thu/giờ vượt</th>
+              {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {locations.map((loc) => (
+              <tr key={loc.id} className="border-t border-brand-forest/10">
+                <td className="px-3 py-2 font-medium text-brand-forest">{loc.name}</td>
+                <td className="px-3 py-2 text-brand-forest/80">{loc.type}</td>
+                <td className="px-3 py-2">
+                  {isAdmin ? (
+                    <CurrencyInput
+                      value={drafts[loc.id].minimumSpend}
+                      onChange={(v) => updateDraft(loc.id, { minimumSpend: v })}
+                      className="w-32 rounded-lg border border-brand-forest/30 px-2 py-1 outline-none focus:border-brand-amber"
+                    />
+                  ) : loc.minimum_spend ? (
+                    formatMoney(loc.minimum_spend)
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  {isAdmin ? (
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.5"
+                      value={drafts[loc.id].includedHours}
+                      onChange={(e) =>
+                        updateDraft(loc.id, { includedHours: Number(e.target.value) })
+                      }
+                      className="w-20 rounded-lg border border-brand-forest/30 px-2 py-1 outline-none focus:border-brand-amber"
+                    />
+                  ) : (
+                    `${loc.included_hours}h`
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  {isAdmin ? (
+                    <CurrencyInput
+                      value={drafts[loc.id].overageFeePerHour}
+                      onChange={(v) => updateDraft(loc.id, { overageFeePerHour: v })}
+                      className="w-32 rounded-lg border border-brand-forest/30 px-2 py-1 outline-none focus:border-brand-amber"
+                    />
+                  ) : loc.overage_fee_per_hour ? (
+                    `${formatMoney(loc.overage_fee_per_hour)}/h`
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                {isAdmin && (
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => handleSave(loc.id)}
+                      disabled={savingId === loc.id}
+                      className="rounded-lg bg-brand-amber px-3 py-1 text-xs font-bold text-white hover:bg-brand-amber/90 disabled:opacity-60"
+                    >
+                      {savingId === loc.id ? "Đang lưu..." : "Lưu"}
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

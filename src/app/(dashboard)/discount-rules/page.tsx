@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAllDiscountRules } from "@/lib/data/discount-rules";
 import { getAllPricingRules } from "@/lib/data/pricing-rules";
+import { getLocations } from "@/lib/data/locations";
 import { getCurrentUser } from "@/lib/data/current-user";
 import { hasModulePermission, firstPermittedPath } from "@/lib/permissions";
 import DiscountRulesClient from "./DiscountRulesClient";
@@ -12,9 +13,10 @@ export default async function DiscountRulesPage() {
     redirect(firstPermittedPath(user.permissions) ?? "/no-access");
   }
 
-  const [discountRules, pricingRules] = await Promise.all([
+  const [discountRules, pricingRules, locations] = await Promise.all([
     getAllDiscountRules(),
     getAllPricingRules(),
+    getLocations(),
   ]);
 
   return (
@@ -23,6 +25,7 @@ export default async function DiscountRulesPage() {
       <DiscountRulesClient
         discountRules={discountRules}
         pricingRules={pricingRules}
+        locations={locations}
         isAdmin={user.role === "admin"}
       />
     </div>

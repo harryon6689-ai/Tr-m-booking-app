@@ -60,6 +60,11 @@ export default function ReportsClient({
             "Tổng tiền cọc": summary.totalDeposit,
             "Số lượt đặt": summary.bookingCount,
             "Số lượt hủy": summary.cancelledCount,
+            "Tiền khách bỏ cọc": summary.totalForfeitedDeposit,
+            "Tổng phụ thu thêm giờ": summary.totalOverageFee,
+            "Tổng thu dưới mức tối thiểu": summary.totalShortfall,
+            "Công nợ chưa thu": summary.totalOutstanding,
+            "Tổng doanh thu phụ": summary.totalExtraRevenue,
           },
         ],
       },
@@ -117,6 +122,25 @@ export default function ReportsClient({
         <SummaryCard label="Tổng tiền cọc" value={formatMoney(summary.totalDeposit)} />
         <SummaryCard label="Số lượt đặt" value={String(summary.bookingCount)} />
         <SummaryCard label="Số lượt hủy" value={String(summary.cancelledCount)} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <SummaryCard label="Tiền khách bỏ cọc" value={formatMoney(summary.totalForfeitedDeposit)} />
+        <SummaryCard label="Tổng phụ thu thêm giờ" value={formatMoney(summary.totalOverageFee)} />
+        <SummaryCard
+          label="Tổng thu dưới mức tối thiểu"
+          value={formatMoney(summary.totalShortfall)}
+        />
+        <SummaryCard
+          label="Công nợ (chưa thu)"
+          value={formatMoney(summary.totalOutstanding)}
+          tone="red"
+        />
+        <SummaryCard
+          label="Tổng doanh thu phụ"
+          value={formatMoney(summary.totalExtraRevenue)}
+          highlight
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -184,21 +208,23 @@ function SummaryCard({
   label,
   value,
   highlight,
+  tone = "forest",
 }: {
   label: string;
   value: string;
   highlight?: boolean;
+  tone?: "forest" | "red";
 }) {
+  const toneClass = highlight
+    ? "text-brand-amber"
+    : tone === "red"
+    ? "text-red-600"
+    : "text-brand-forest";
+
   return (
     <div className="rounded-xl border border-brand-forest/15 bg-white p-4">
       <p className="text-xs font-medium text-brand-forest/60">{label}</p>
-      <p
-        className={`mt-1 text-xl font-bold ${
-          highlight ? "text-brand-amber" : "text-brand-forest"
-        }`}
-      >
-        {value}
-      </p>
+      <p className={`mt-1 text-xl font-bold ${toneClass}`}>{value}</p>
     </div>
   );
 }

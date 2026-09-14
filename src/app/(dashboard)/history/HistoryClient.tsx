@@ -21,10 +21,6 @@ const STATUS_LABEL: Record<BookingStatus, string> = {
   hủy: "Đã hủy",
 };
 
-function formatMoney(n: number) {
-  return n.toLocaleString("vi-VN") + "đ";
-}
-
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("vi-VN", {
     day: "2-digit",
@@ -203,7 +199,6 @@ export default function HistoryClient({
                 "Công ty/Tổ chức": r.organization_name ?? "",
                 SĐT: r.phone ?? "",
                 "Trạng thái": STATUS_LABEL[r.status],
-                "Giá cuối": r.final_price,
               }))}
             />
           </div>
@@ -219,7 +214,6 @@ export default function HistoryClient({
                   <th className="whitespace-nowrap px-3 py-2 font-semibold">Công ty/Tổ chức</th>
                   <th className="whitespace-nowrap px-3 py-2 font-semibold">SĐT</th>
                   <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
-                  <th className="whitespace-nowrap px-3 py-2 font-semibold">Giá cuối</th>
                 </tr>
               </thead>
               <tbody>
@@ -277,9 +271,6 @@ export default function HistoryClient({
                       >
                         {STATUS_LABEL[r.status]}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 text-brand-forest/80">
-                      {formatMoney(r.final_price)}
                     </td>
                   </tr>
                 ))}

@@ -26,6 +26,11 @@ export interface RevenueSummary {
   cancelledCount: number;
   byLocation: LocationRevenue[];
   byDay: DayRevenue[];
+  totalForfeitedDeposit: number;
+  totalOverageFee: number;
+  totalShortfall: number;
+  totalOutstanding: number;
+  totalExtraRevenue: number;
 }
 
 const EMPTY_SUMMARY: RevenueSummary = {
@@ -35,6 +40,11 @@ const EMPTY_SUMMARY: RevenueSummary = {
   cancelledCount: 0,
   byLocation: [],
   byDay: [],
+  totalForfeitedDeposit: 0,
+  totalOverageFee: 0,
+  totalShortfall: 0,
+  totalOutstanding: 0,
+  totalExtraRevenue: 0,
 };
 
 export async function getRevenueSummary(
@@ -56,7 +66,9 @@ export async function getRevenueSummary(
 
   let query = supabase
     .from("bookings")
-    .select("id, location_id, final_price, deposit_amount, status, start_time, locations(name)")
+    .select(
+      "id, location_id, final_price, deposit_amount, status, start_time, overage_fee, overage_fee_paid, actual_drink_spend, minimum_spend_shortfall_paid, locations(name, minimum_spend)"
+    )
     .order("start_time", { ascending: true });
 
   if (filters.dateFrom) {
@@ -73,20 +85,40 @@ export async function getRevenueSummary(
   let totalDeposit = 0;
   let bookingCount = 0;
   let cancelledCount = 0;
+  let totalForfeitedDeposit = 0;
+  let totalOverageFee = 0;
+  let totalShortfall = 0;
+  let totalOutstandingOverage = 0;
+  let totalOutstandingShortfall = 0;
   const byLocationMap = new Map<string, { name: string; revenue: number; count: number }>();
   const byDayMap = new Map<string, number>();
 
   for (const row of data ?? []) {
-    const b = row as typeof row & { locations: { name: string } | null };
+    const b = row as typeof row & {
+      locations: { name: string; minimum_spend: number | null } | null;
+    };
 
     if (b.status === "hủy") {
       cancelledCount += 1;
+      if (b.deposit_amount > 0) totalForfeitedDeposit += b.deposit_amount;
       continue;
     }
 
     bookingCount += 1;
     totalRevenue += b.final_price;
     totalDeposit += b.deposit_amount;
+
+    totalOverageFee += b.overage_fee;
+    if (b.overage_fee > 0 && !b.overage_fee_paid) totalOutstandingOverage += b.overage_fee;
+
+    const minimumSpend = b.locations?.minimum_spend;
+    if (minimumSpend != null && minimumSpend > 0) {
+      const shortfall = Math.max(0, minimumSpend - (b.actual_drink_spend ?? 0));
+      totalShortfall += shortfall;
+      if (shortfall > 0 && !b.minimum_spend_shortfall_paid) {
+        totalOutstandingShortfall += shortfall;
+      }
+    }
 
     const locName = b.locations?.name ?? "?";
     const loc = byLocationMap.get(b.location_id) ?? { name: locName, revenue: 0, count: 0 };
@@ -103,6 +135,11 @@ export async function getRevenueSummary(
     totalDeposit,
     bookingCount,
     cancelledCount,
+    totalForfeitedDeposit,
+    totalOverageFee,
+    totalShortfall,
+    totalOutstanding: totalOutstandingOverage + totalOutstandingShortfall,
+    totalExtraRevenue: totalForfeitedDeposit + totalOverageFee + totalShortfall,
     byLocation: Array.from(byLocationMap.entries())
       .map(([location_id, v]) => ({
         location_id,

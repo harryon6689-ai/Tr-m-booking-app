@@ -13,10 +13,6 @@ const STATUS_LABEL: Record<BookingStatus, string> = {
   hủy: "Đã hủy",
 };
 
-function formatMoney(n: number) {
-  return n.toLocaleString("vi-VN") + "đ";
-}
-
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("vi-VN", {
     day: "2-digit",
@@ -60,10 +56,6 @@ export default function CustomerHistoryModal({
     refetch();
   }, [refetch]);
 
-  const totalSpent = rows
-    .filter((r) => r.status !== "hủy")
-    .reduce((sum, r) => sum + r.final_price, 0);
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
@@ -102,10 +94,7 @@ export default function CustomerHistoryModal({
               className="rounded-lg border border-brand-forest/30 px-3 py-1.5 text-sm outline-none focus:border-brand-amber"
             />
           </div>
-          <p className="ml-auto text-sm text-brand-forest/70">
-            {rows.length} lượt đặt · Tổng chi tiêu{" "}
-            <span className="font-bold text-brand-amber">{formatMoney(totalSpent)}</span>
-          </p>
+          <p className="ml-auto text-sm text-brand-forest/70">{rows.length} lượt đặt</p>
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-brand-forest/15">
@@ -115,7 +104,6 @@ export default function CustomerHistoryModal({
                 <th className="whitespace-nowrap px-3 py-2 font-semibold">Ngày giờ</th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold">Vị trí</th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
-                <th className="whitespace-nowrap px-3 py-2 font-semibold">Giá cuối</th>
               </tr>
             </thead>
             <tbody>
@@ -135,9 +123,6 @@ export default function CustomerHistoryModal({
                     >
                       {STATUS_LABEL[r.status]}
                     </span>
-                  </td>
-                  <td className="px-3 py-2 text-brand-forest/80">
-                    {formatMoney(r.final_price)}
                   </td>
                 </tr>
               ))}

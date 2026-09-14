@@ -23,6 +23,15 @@ export interface BookingInput {
   equipment_needed: string[];
   equipment_note: string;
   pricing_rule_id: string | null;
+  vat_invoice_requested: boolean;
+  vat_company_name: string | null;
+  vat_company_address: string | null;
+  vat_tax_code: string | null;
+  vat_email: string | null;
+  actual_drink_spend: number;
+  overage_fee: number;
+  overage_fee_paid: boolean;
+  minimum_spend_shortfall_paid: boolean;
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -220,6 +229,40 @@ export async function setDepositRefunded(id: string, refunded: boolean) {
   const { error } = await supabase
     .from("bookings")
     .update({ deposit_refunded: refunded })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/check-in");
+  return { error: null };
+}
+
+export async function setOverageFeePaid(id: string, paid: boolean) {
+  const supabase = await createClient();
+  const { error: authError } = await requireEditAccess(supabase);
+
+  if (authError) return { error: authError };
+
+  const { error } = await supabase
+    .from("bookings")
+    .update({ overage_fee_paid: paid })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/check-in");
+  return { error: null };
+}
+
+export async function setMinimumSpendShortfallPaid(id: string, paid: boolean) {
+  const supabase = await createClient();
+  const { error: authError } = await requireEditAccess(supabase);
+
+  if (authError) return { error: authError };
+
+  const { error } = await supabase
+    .from("bookings")
+    .update({ minimum_spend_shortfall_paid: paid })
     .eq("id", id);
 
   if (error) return { error: error.message };

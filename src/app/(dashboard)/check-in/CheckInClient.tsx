@@ -10,11 +10,14 @@ import {
   setBookingArrived,
   cancelBooking,
   setDepositRefunded,
+  setOverageFeePaid,
+  setMinimumSpendShortfallPaid,
 } from "@/lib/actions/bookings";
 import { setFixedCustomerArrived } from "@/lib/actions/fixed-customer-checkins";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import type { Database } from "@/lib/types/database";
 import BookingForm from "@/components/BookingForm";
+import CheckInQuickView from "./CheckInQuickView";
 
 type Location = Database["public"]["Tables"]["locations"]["Row"];
 type DiscountRule = Database["public"]["Tables"]["discount_rules"]["Row"];
@@ -153,7 +156,10 @@ export default function CheckInClient({
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [togglingOverageId, setTogglingOverageId] = useState<string | null>(null);
+  const [togglingShortfallId, setTogglingShortfallId] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<CheckinRow | null>(null);
+  const [viewingRow, setViewingRow] = useState<CheckinRow | null>(null);
   const [activeFilter, setActiveFilter] = useState<QuickFilter>("all");
   const router = useRouter();
 
@@ -245,6 +251,31 @@ export default function CheckInClient({
     refetch();
   }
 
+  async function handleToggleOverageFeePaid(row: CheckinRow) {
+    setTogglingOverageId(row.id);
+    const result = await setOverageFeePaid(row.id, !row.overage_fee_paid);
+    setTogglingOverageId(null);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    refetch();
+  }
+
+  async function handleToggleShortfallPaid(row: CheckinRow) {
+    setTogglingShortfallId(row.id);
+    const result = await setMinimumSpendShortfallPaid(
+      row.id,
+      !row.minimum_spend_shortfall_paid
+    );
+    setTogglingShortfallId(null);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    refetch();
+  }
+
   function toggleFilter(f: QuickFilter) {
     setActiveFilter((prev) => (prev === f ? "all" : f));
   }
@@ -290,6 +321,27 @@ export default function CheckInClient({
     .filter((r) => r.deposit_amount > 0)
     .reduce((sum, r) => sum + r.deposit_amount, 0);
   const totalCancelled = cancelledRows.length;
+
+  // Overage fee (phụ thu thêm giờ) and minimum-spend shortfall (thu dưới mức tối
+  // thiểu) revenue — computed regardless of paid/unpaid status; "công nợ" tracks
+  // just the unpaid portion of those two.
+  const totalOverageFee = realBookingRows.reduce((sum, r) => sum + r.overage_fee, 0);
+  const totalOverageFeeUnpaid = realBookingRows
+    .filter((r) => r.overage_fee > 0 && !r.overage_fee_paid)
+    .reduce((sum, r) => sum + r.overage_fee, 0);
+  const totalShortfall = realBookingRows.reduce((sum, r) => {
+    const minimumSpend = locations.find((l) => l.id === r.location_id)?.minimum_spend;
+    if (!minimumSpend || minimumSpend <= 0) return sum;
+    return sum + Math.max(0, minimumSpend - (r.actual_drink_spend ?? 0));
+  }, 0);
+  const totalShortfallUnpaid = realBookingRows.reduce((sum, r) => {
+    if (r.minimum_spend_shortfall_paid) return sum;
+    const minimumSpend = locations.find((l) => l.id === r.location_id)?.minimum_spend;
+    if (!minimumSpend || minimumSpend <= 0) return sum;
+    return sum + Math.max(0, minimumSpend - (r.actual_drink_spend ?? 0));
+  }, 0);
+  const totalOutstanding = totalOverageFeeUnpaid + totalShortfallUnpaid;
+  const totalExtraRevenue = totalForfeited + totalOverageFee + totalShortfall;
 
   const filteredRows = rows.filter((r) => {
     switch (activeFilter) {
@@ -391,6 +443,13 @@ export default function CheckInClient({
           onClick={() => toggleFilter("has_deposit")}
         />
       </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <SummaryCard label="Tổng phụ thu thêm giờ" value={formatMoney(totalOverageFee)} />
+        <SummaryCard label="Tổng thu dưới mức tối thiểu" value={formatMoney(totalShortfall)} />
+        <SummaryCard label="Công nợ (chưa thu)" value={formatMoney(totalOutstanding)} tone="red" />
+        <SummaryCard label="Tổng doanh thu phụ" value={formatMoney(totalExtraRevenue)} tone="amber" />
+      </div>
       {activeFilter !== "all" && (
         <p className="-mt-2 text-xs font-medium text-brand-forest/60">
           Đang lọc theo mục đã chọn ở trên — bấm lại vào thẻ đó để bỏ lọc.
@@ -467,8 +526,15 @@ export default function CheckInClient({
               <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Đối tượng</th>
               <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Số người</th>
               <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Đặt cọc</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">
+                Cần thanh toán thêm
+              </th>
+              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">
+                Phụ thu thêm giờ
+              </th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Ghi chú</th>
               <th className="whitespace-nowrap px-3 py-2 text-center font-semibold">Trạng thái</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center font-semibold"></th>
             </tr>
           </thead>
           <tbody>
@@ -485,7 +551,19 @@ export default function CheckInClient({
                   <td className="px-3 py-2 font-medium text-brand-forest">
                     {formatTimeRange(r.start_time, r.end_time)}
                   </td>
-                  <td className="px-3 py-2 text-brand-forest/80">{r.location_name}</td>
+                  <td className="px-3 py-2 text-brand-forest/80">
+                    {r.location_name}
+                    {(() => {
+                      const minimumSpend = locations.find(
+                        (l) => l.id === r.location_id
+                      )?.minimum_spend;
+                      return minimumSpend ? (
+                        <span className="block text-xs font-normal text-brand-forest/50">
+                          Mức chi tối thiểu: {formatMoney(minimumSpend)}
+                        </span>
+                      ) : null;
+                    })()}
+                  </td>
                   <td className="px-3 py-2 font-medium">
                     {r.is_fixed_customer ? (
                       <button
@@ -565,6 +643,77 @@ export default function CheckInClient({
                       )}
                     </div>
                   </td>
+                  <td className="px-3 py-2 text-center">
+                    {(() => {
+                      const minimumSpend = locations.find(
+                        (l) => l.id === r.location_id
+                      )?.minimum_spend;
+                      if (r.is_fixed_customer || !minimumSpend || minimumSpend <= 0) {
+                        return <span className="text-brand-forest/40">-</span>;
+                      }
+                      const shortfall = Math.max(
+                        0,
+                        minimumSpend - (r.actual_drink_spend ?? 0)
+                      );
+                      if (shortfall <= 0) {
+                        return (
+                          <span className="rounded-full bg-brand-forest/10 px-2 py-0.5 text-xs font-medium text-brand-forest">
+                            Đủ
+                          </span>
+                        );
+                      }
+                      return (
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
+                            {formatMoney(shortfall)}
+                          </span>
+                          <label
+                            className={`flex items-center gap-1 text-[11px] font-bold ${
+                              canEdit ? "cursor-pointer" : "cursor-default opacity-60"
+                            } ${
+                              r.minimum_spend_shortfall_paid
+                                ? "text-brand-forest"
+                                : "text-brand-amber"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={r.minimum_spend_shortfall_paid}
+                              disabled={!canEdit || togglingShortfallId === r.id}
+                              onChange={() => handleToggleShortfallPaid(r)}
+                              className="h-3.5 w-3.5 accent-brand-forest"
+                            />
+                            {r.minimum_spend_shortfall_paid ? "Đã thu" : "Chưa thu"}
+                          </label>
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {r.is_fixed_customer || r.overage_fee <= 0 ? (
+                      <span className="text-brand-forest/40">-</span>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
+                          {formatMoney(r.overage_fee)}
+                        </span>
+                        <label
+                          className={`flex items-center gap-1 text-[11px] font-bold ${
+                            canEdit ? "cursor-pointer" : "cursor-default opacity-60"
+                          } ${r.overage_fee_paid ? "text-brand-forest" : "text-brand-amber"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={r.overage_fee_paid}
+                            disabled={!canEdit || togglingOverageId === r.id}
+                            onChange={() => handleToggleOverageFeePaid(r)}
+                            className="h-3.5 w-3.5 accent-brand-forest"
+                          />
+                          {r.overage_fee_paid ? "Đã thu" : "Chưa thu"}
+                        </label>
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-brand-forest/60">{r.note || "-"}</td>
                   <td className="px-3 py-2">
                     <div className="flex flex-col items-center gap-1">
@@ -601,6 +750,14 @@ export default function CheckInClient({
                       )}
                     </div>
                   </td>
+                  <td className="px-3 py-2 text-center">
+                    <button
+                      onClick={() => setViewingRow(r)}
+                      className="text-xs font-semibold text-brand-forest hover:underline"
+                    >
+                      Xem
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -636,6 +793,16 @@ export default function CheckInClient({
             />
           </div>
         </div>
+      )}
+
+      {viewingRow && (
+        <CheckInQuickView
+          row={viewingRow}
+          minimumSpend={
+            locations.find((l) => l.id === viewingRow.location_id)?.minimum_spend ?? null
+          }
+          onClose={() => setViewingRow(null)}
+        />
       )}
     </div>
   );

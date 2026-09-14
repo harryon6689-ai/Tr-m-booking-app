@@ -15,6 +15,7 @@ import {
   type FixedCustomerInput,
 } from "@/lib/actions/fixed-customers";
 import CurrencyInput from "@/components/CurrencyInput";
+import ReviewRow from "@/components/ReviewRow";
 import {
   formatPricingRule,
   formatAttendeeRange,
@@ -83,15 +84,6 @@ function todayStr() {
   ).padStart(2, "0")}`;
 }
 
-function ReviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4 border-b border-brand-forest/10 py-2 text-sm last:border-0">
-      <span className="text-brand-forest/60">{label}</span>
-      <span className="text-right font-medium text-brand-forest">{value}</span>
-    </div>
-  );
-}
-
 export default function QuickBookingClient({
   locations,
   discountRules,
@@ -122,11 +114,15 @@ export default function QuickBookingClient({
   const [customerType, setCustomerType] = useState<CustomerType>("thường");
   const [discountApplied, setDiscountApplied] = useState(0);
   const [depositAmount, setDepositAmount] = useState(0);
-  const [finalPrice, setFinalPrice] = useState(0);
   const [pricingRuleId, setPricingRuleId] = useState<string | null>(null);
   const [equipmentNeeded, setEquipmentNeeded] = useState<string[]>([]);
   const [equipmentNote, setEquipmentNote] = useState("");
   const [status, setStatus] = useState<BookingStatus>("đã đặt");
+  const [vatInvoiceRequested, setVatInvoiceRequested] = useState(false);
+  const [vatCompanyName, setVatCompanyName] = useState("");
+  const [vatCompanyAddress, setVatCompanyAddress] = useState("");
+  const [vatTaxCode, setVatTaxCode] = useState("");
+  const [vatEmail, setVatEmail] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -137,6 +133,19 @@ export default function QuickBookingClient({
   const visibleEntryTypes = ENTRY_TYPE_OPTIONS.filter((o) => !o.adminOnly || isAdmin);
   const location = locations.find((l) => l.id === locationId) ?? null;
   const locationName = location?.name ?? "";
+
+  const durationHours =
+    entryType === "single" && startTime && endTime
+      ? Math.max(
+          0,
+          (new Date(`${startDate}T${endTime}:00`).getTime() -
+            new Date(`${startDate}T${startTime}:00`).getTime()) /
+            3_600_000
+        )
+      : 0;
+  const overageHours = location ? Math.max(0, durationHours - location.included_hours) : 0;
+  const overageFee =
+    location && overageHours > 0 ? overageHours * (location.overage_fee_per_hour ?? 0) : 0;
 
   const matchedPreferredCustomer = (() => {
     const phoneTrim = phone.trim();
@@ -201,9 +210,6 @@ export default function QuickBookingClient({
       : [];
 
   function applyPricingRule(rule: PricingRule) {
-    const startIso = new Date(`${startDate}T${startTime}:00`).toISOString();
-    const endIso = new Date(`${startDate}T${endTime}:00`).toISOString();
-    setFinalPrice(computeSuggestedPrice(rule, startIso, endIso));
     setPricingRuleId(rule.id);
   }
 
@@ -224,6 +230,14 @@ export default function QuickBookingClient({
       setError("Giờ kết thúc phải sau giờ bắt đầu.");
       return;
     }
+    if (
+      entryType === "single" &&
+      vatInvoiceRequested &&
+      (!vatCompanyName.trim() || !vatCompanyAddress.trim() || !vatTaxCode.trim() || !vatEmail.trim())
+    ) {
+      setError("Nhập đủ thông tin xuất hoá đơn VAT (tên công ty, địa chỉ, mã số thuế, email).");
+      return;
+    }
 
     setStep("review");
   }
@@ -242,7 +256,10 @@ export default function QuickBookingClient({
         status,
         deposit_amount: depositAmount,
         discount_applied: discountApplied,
-        final_price: finalPrice,
+        final_price: 0,
+        overage_fee: overageFee,
+        overage_fee_paid: false,
+        minimum_spend_shortfall_paid: false,
         note,
         org_type: orgType,
         organization_name: orgType === "công ty/tổ chức" ? organizationName : null,
@@ -250,6 +267,12 @@ export default function QuickBookingClient({
         equipment_needed: equipmentNeeded,
         equipment_note: equipmentNote,
         pricing_rule_id: pricingRuleId,
+        vat_invoice_requested: vatInvoiceRequested,
+        vat_company_name: vatInvoiceRequested ? vatCompanyName : null,
+        vat_company_address: vatInvoiceRequested ? vatCompanyAddress : null,
+        vat_tax_code: vatInvoiceRequested ? vatTaxCode : null,
+        vat_email: vatInvoiceRequested ? vatEmail : null,
+        actual_drink_spend: 0,
       };
       const result = await createBooking(input);
       setLoading(false);
@@ -314,11 +337,15 @@ export default function QuickBookingClient({
     setCustomerType("thường");
     setDiscountApplied(0);
     setDepositAmount(0);
-    setFinalPrice(0);
     setPricingRuleId(null);
     setEquipmentNeeded([]);
     setEquipmentNote("");
     setStatus("đã đặt");
+    setVatInvoiceRequested(false);
+    setVatCompanyName("");
+    setVatCompanyAddress("");
+    setVatTaxCode("");
+    setVatEmail("");
     setAppliedPreferredId(null);
     setDismissedPreferredId(null);
     setNote("");
@@ -389,7 +416,12 @@ export default function QuickBookingClient({
               <ReviewRow label="Hạng khách" value={customerType} />
               <ReviewRow label="Giảm giá" value={`${discountApplied}%`} />
               <ReviewRow label="Tiền cọc" value={`${depositAmount.toLocaleString("vi-VN")}đ`} />
-              <ReviewRow label="Giá cuối" value={`${finalPrice.toLocaleString("vi-VN")}đ`} />
+              {overageFee > 0 && (
+                <ReviewRow
+                  label="Phụ thu thêm giờ"
+                  value={`${overageFee.toLocaleString("vi-VN")}đ (vượt ${overageHours.toFixed(1)}h)`}
+                />
+              )}
               {equipmentNeeded.length > 0 && (
                 <ReviewRow label="Thiết bị" value={equipmentNeeded.join(", ")} />
               )}
@@ -400,6 +432,18 @@ export default function QuickBookingClient({
                   status === "đã tới" ? "Đã tới" : status === "hủy" ? "Hủy" : "Đã đặt"
                 }
               />
+              <ReviewRow
+                label="Xuất hoá đơn VAT"
+                value={vatInvoiceRequested ? "Có" : "Không"}
+              />
+              {vatInvoiceRequested && (
+                <>
+                  <ReviewRow label="Tên công ty" value={vatCompanyName} />
+                  <ReviewRow label="Địa chỉ" value={vatCompanyAddress} />
+                  <ReviewRow label="Mã số thuế" value={vatTaxCode} />
+                  <ReviewRow label="Email" value={vatEmail} />
+                </>
+              )}
             </>
           )}
           <ReviewRow label="Ghi chú" value={note || "-"} />
@@ -710,7 +754,7 @@ export default function QuickBookingClient({
             </select>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-brand-forest">
                 Giảm giá (%)
@@ -720,8 +764,10 @@ export default function QuickBookingClient({
                 min={0}
                 max={100}
                 step="0.01"
-                value={discountApplied}
-                onChange={(e) => setDiscountApplied(Number(e.target.value))}
+                value={discountApplied === 0 ? "" : discountApplied}
+                onChange={(e) =>
+                  setDiscountApplied(e.target.value === "" ? 0 : Number(e.target.value))
+                }
                 className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
               />
             </div>
@@ -735,17 +781,16 @@ export default function QuickBookingClient({
                 className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-brand-forest">
-                Giá cuối
-              </label>
-              <CurrencyInput
-                value={finalPrice}
-                onChange={setFinalPrice}
-                className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
-              />
-            </div>
           </div>
+
+          {overageHours > 0 && (
+            <p className="rounded-lg bg-brand-cream px-3 py-2 text-xs font-medium text-brand-forest">
+              Thời lượng đặt chỗ vượt{" "}
+              <span className="font-bold">{location?.included_hours}h</span> quy định{" "}
+              {overageHours.toFixed(1)}h — phụ thu thêm giờ tự tính:{" "}
+              <span className="font-bold">{overageFee.toLocaleString("vi-VN")}đ</span>.
+            </p>
+          )}
 
           <div>
             <label className="mb-1 block text-sm font-medium text-brand-forest">
@@ -772,6 +817,66 @@ export default function QuickBookingClient({
               placeholder="Thiết bị khác..."
               className="mt-2 w-full rounded-lg border border-brand-forest/30 px-3 py-2 text-sm outline-none focus:border-brand-amber"
             />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-brand-forest">
+              <input
+                type="checkbox"
+                checked={vatInvoiceRequested}
+                onChange={(e) => setVatInvoiceRequested(e.target.checked)}
+              />
+              Xuất hoá đơn VAT
+            </label>
+            {vatInvoiceRequested && (
+              <div className="mt-2 grid grid-cols-1 gap-3 rounded-lg border border-brand-forest/15 bg-brand-cream/40 p-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-brand-forest">
+                    Tên công ty
+                  </label>
+                  <input
+                    required={vatInvoiceRequested}
+                    value={vatCompanyName}
+                    onChange={(e) => setVatCompanyName(e.target.value)}
+                    className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-brand-forest">
+                    Mã số thuế
+                  </label>
+                  <input
+                    required={vatInvoiceRequested}
+                    value={vatTaxCode}
+                    onChange={(e) => setVatTaxCode(e.target.value)}
+                    className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-brand-forest">
+                    Địa chỉ
+                  </label>
+                  <input
+                    required={vatInvoiceRequested}
+                    value={vatCompanyAddress}
+                    onChange={(e) => setVatCompanyAddress(e.target.value)}
+                    className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-brand-forest">
+                    Địa chỉ Email
+                  </label>
+                  <input
+                    type="email"
+                    required={vatInvoiceRequested}
+                    value={vatEmail}
+                    onChange={(e) => setVatEmail(e.target.value)}
+                    className="w-full rounded-lg border border-brand-forest/30 px-3 py-2 outline-none focus:border-brand-amber"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
