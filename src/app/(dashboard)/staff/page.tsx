@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/data/current-user";
 import { getAllStaffAccounts } from "@/lib/actions/staff";
+import { getGoogleDriveStatus } from "@/lib/actions/backup";
 import StaffClient from "./StaffClient";
 
 export default async function StaffPage() {
@@ -10,7 +11,10 @@ export default async function StaffPage() {
     redirect("/");
   }
 
-  const accounts = await getAllStaffAccounts();
+  const [accounts, driveStatus] = await Promise.all([
+    getAllStaffAccounts(),
+    getGoogleDriveStatus(),
+  ]);
 
   return (
     <div>
@@ -19,7 +23,11 @@ export default async function StaffPage() {
         Tạo tài khoản đăng nhập bằng số điện thoại và bật/tắt quyền truy cập từng
         module cho từng nhân viên.
       </p>
-      <StaffClient accounts={accounts} currentUserId={user.id} />
+      <StaffClient
+        accounts={accounts}
+        currentUserId={user.id}
+        initialGoogleEmail={driveStatus.email}
+      />
     </div>
   );
 }

@@ -503,6 +503,24 @@ export interface Database {
           }
         ];
       };
+      app_settings: {
+        Row: {
+          key: string;
+          value: unknown;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value: unknown;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: unknown;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

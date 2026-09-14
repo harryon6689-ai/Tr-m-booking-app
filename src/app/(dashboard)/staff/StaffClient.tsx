@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Database, UserPermissions, UserRole } from "@/lib/types/database";
 import {
   createStaffAccount,
@@ -12,8 +12,43 @@ import {
 } from "@/lib/actions/staff";
 import { PERMISSION_MODULES, DEFAULT_STAFF_PERMISSIONS } from "@/lib/permissions";
 import ExportExcelButton from "@/components/ExportExcelButton";
+import {
+  getFullDataBackup,
+  disconnectGoogleDrive,
+  uploadBackupFile,
+  type BackupTable,
+} from "@/lib/actions/backup";
+import {
+  buildExcelWorkbookBytes,
+  downloadExcelBytes,
+  excelBytesToBase64,
+} from "@/lib/export-excel";
 
 type StaffAccount = Database["public"]["Tables"]["users"]["Row"];
+
+const BACKUP_SHEET_LABELS: Record<BackupTable, string> = {
+  bookings: "Đặt phòng",
+  fixed_customers: "Khách cố định",
+  fixed_customer_checkins: "Điểm danh khách cố định",
+  kol_bookings: "KOL",
+  preferred_customers: "Khách VIP-KOL",
+  discount_rules: "Chính sách giảm giá",
+  pricing_rules: "Chính sách giá",
+  locations: "Vị trí",
+  users: "Nhân viên",
+};
+
+/** Flattens a raw DB row into plain cell values an Excel sheet can hold. */
+function flattenForExcel(row: Record<string, unknown>): Record<string, string | number> {
+  const flat: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (value == null) flat[key] = "";
+    else if (typeof value === "number" || typeof value === "string") flat[key] = value;
+    else if (typeof value === "boolean") flat[key] = value ? "true" : "false";
+    else flat[key] = JSON.stringify(value);
+  }
+  return flat;
+}
 
 function permissionSummary(
   role: UserRole,
@@ -29,15 +64,75 @@ function permissionSummary(
 export default function StaffClient({
   accounts,
   currentUserId,
+  initialGoogleEmail,
 }: {
   accounts: StaffAccount[];
   currentUserId: string;
+  initialGoogleEmail: string | null;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [mode, setMode] = useState<"list" | "form">("list");
   const [editing, setEditing] = useState<StaffAccount | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [backingUp, setBackingUp] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [googleEmail, setGoogleEmail] = useState(initialGoogleEmail);
+
+  const [handledGoogleParams, setHandledGoogleParams] = useState(false);
+  if (!handledGoogleParams) {
+    const connected = searchParams.get("google_connected");
+    const googleError = searchParams.get("google_error");
+    if (connected || googleError) {
+      setHandledGoogleParams(true);
+      if (connected) setGoogleEmail(connected);
+      if (googleError) alert(googleError);
+      router.replace("/staff");
+    }
+  }
+
+  async function handleBackup() {
+    setBackingUp(true);
+    const result = await getFullDataBackup();
+    if (result.error !== null) {
+      setBackingUp(false);
+      alert(result.error);
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const sheets = Object.entries(result.data).map(([table, rows]) => ({
+      name: BACKUP_SHEET_LABELS[table as BackupTable],
+      rows: rows.map(flattenForExcel),
+    }));
+    const bytes = await buildExcelWorkbookBytes(sheets);
+    downloadExcelBytes(bytes, `backup-du-lieu-tram_${today}.xlsx`);
+
+    if (googleEmail) {
+      const uploadResult = await uploadBackupFile(
+        excelBytesToBase64(bytes),
+        `backup-du-lieu-tram_${today}.xlsx`
+      );
+      if (uploadResult.error) {
+        alert(`Đã tải file về máy, nhưng tải lên Google Drive thất bại: ${uploadResult.error}`);
+      } else {
+        alert(`Đã sao lưu xong và tải lên Google Drive (${googleEmail}).`);
+      }
+    }
+    setBackingUp(false);
+  }
+
+  async function handleDisconnectGoogle() {
+    if (!confirm("Ngắt kết nối Google Drive?")) return;
+    setDisconnecting(true);
+    const result = await disconnectGoogleDrive();
+    setDisconnecting(false);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    setGoogleEmail(null);
+  }
 
   function openCreate() {
     setEditing(null);
@@ -107,17 +202,55 @@ export default function StaffClient({
         >
           + Tạo tài khoản nhân viên
         </button>
-        <ExportExcelButton
-          filename="danh-sach-nhan-vien"
-          sheetName="Nhân viên"
-          rows={accounts.map((a) => ({
-            Tên: a.name,
-            "Số điện thoại": a.phone ?? "",
-            "Vai trò": a.role === "admin" ? "Quản lý" : "Nhân viên",
-            Quyền: permissionSummary(a.role, a.permissions, a.view_only),
-            "Trạng thái": a.active ? "Đang hoạt động" : "Đã khóa",
-          }))}
-        />
+        <div className="flex gap-2">
+          <ExportExcelButton
+            filename="danh-sach-nhan-vien"
+            sheetName="Nhân viên"
+            rows={accounts.map((a) => ({
+              Tên: a.name,
+              "Số điện thoại": a.phone ?? "",
+              "Vai trò": a.role === "admin" ? "Quản lý" : "Nhân viên",
+              Quyền: permissionSummary(a.role, a.permissions, a.view_only),
+              "Trạng thái": a.active ? "Đang hoạt động" : "Đã khóa",
+            }))}
+          />
+          <button
+            type="button"
+            onClick={handleBackup}
+            disabled={backingUp}
+            className="rounded-lg border border-brand-forest/30 px-3 py-1.5 text-sm font-semibold text-brand-forest hover:bg-brand-cream disabled:opacity-50"
+          >
+            {backingUp ? "Đang sao lưu..." : "Sao lưu toàn bộ dữ liệu"}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-forest/15 bg-white p-4">
+        <div>
+          <p className="text-sm font-semibold text-brand-forest">Google Drive</p>
+          <p className="text-xs text-brand-forest/60">
+            {googleEmail
+              ? `Đã kết nối — file sao lưu sẽ tự động tải lên tài khoản ${googleEmail}.`
+              : "Chưa kết nối — file sao lưu chỉ tải về máy."}
+          </p>
+        </div>
+        {googleEmail ? (
+          <button
+            type="button"
+            onClick={handleDisconnectGoogle}
+            disabled={disconnecting}
+            className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+          >
+            {disconnecting ? "Đang ngắt..." : "Ngắt kết nối"}
+          </button>
+        ) : (
+          <a
+            href="/api/google/auth"
+            className="rounded-lg bg-brand-amber px-3 py-1.5 text-sm font-bold text-white hover:bg-brand-amber/90"
+          >
+            Kết nối Google Drive
+          </a>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
