@@ -23,14 +23,14 @@ interface DiscountRulesClientProps {
   discountRules: DiscountRule[];
   pricingRules: PricingRule[];
   locations: Location[];
-  isAdmin: boolean;
+  canEdit: boolean;
 }
 
 export default function DiscountRulesClient({
   discountRules,
   pricingRules,
   locations,
-  isAdmin,
+  canEdit,
 }: DiscountRulesClientProps) {
   const [tab, setTab] = useState<"discount" | "pricing" | "minimum-spend">("discount");
 
@@ -64,11 +64,11 @@ export default function DiscountRulesClient({
       </div>
 
       {tab === "discount" ? (
-        <DiscountPercentTable discountRules={discountRules} isAdmin={isAdmin} />
+        <DiscountPercentTable discountRules={discountRules} canEdit={canEdit} />
       ) : tab === "pricing" ? (
-        <PricingRulesPanel pricingRules={pricingRules} isAdmin={isAdmin} />
+        <PricingRulesPanel pricingRules={pricingRules} canEdit={canEdit} />
       ) : (
-        <MinimumSpendPanel locations={locations} isAdmin={isAdmin} />
+        <MinimumSpendPanel locations={locations} canEdit={canEdit} />
       )}
     </div>
   );
@@ -86,10 +86,10 @@ interface PolicyDraft {
 
 function MinimumSpendPanel({
   locations,
-  isAdmin,
+  canEdit,
 }: {
   locations: Location[];
-  isAdmin: boolean;
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const [drafts, setDrafts] = useState<Record<string, PolicyDraft>>(
@@ -142,7 +142,7 @@ function MinimumSpendPanel({
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Mức chi tối thiểu</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Số giờ quy định</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Phụ thu/giờ vượt</th>
-              {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
+              {canEdit && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
             </tr>
           </thead>
           <tbody>
@@ -151,7 +151,7 @@ function MinimumSpendPanel({
                 <td className="px-3 py-2 font-medium text-brand-forest">{loc.name}</td>
                 <td className="px-3 py-2 text-brand-forest/80">{loc.type}</td>
                 <td className="px-3 py-2">
-                  {isAdmin ? (
+                  {canEdit ? (
                     <CurrencyInput
                       value={drafts[loc.id].minimumSpend}
                       onChange={(v) => updateDraft(loc.id, { minimumSpend: v })}
@@ -164,7 +164,7 @@ function MinimumSpendPanel({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  {isAdmin ? (
+                  {canEdit ? (
                     <input
                       type="number"
                       min={0}
@@ -180,7 +180,7 @@ function MinimumSpendPanel({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  {isAdmin ? (
+                  {canEdit ? (
                     <CurrencyInput
                       value={drafts[loc.id].overageFeePerHour}
                       onChange={(v) => updateDraft(loc.id, { overageFeePerHour: v })}
@@ -192,7 +192,7 @@ function MinimumSpendPanel({
                     "-"
                   )}
                 </td>
-                {isAdmin && (
+                {canEdit && (
                   <td className="px-3 py-2">
                     <button
                       onClick={() => handleSave(loc.id)}
@@ -214,10 +214,10 @@ function MinimumSpendPanel({
 
 function DiscountPercentTable({
   discountRules,
-  isAdmin,
+  canEdit,
 }: {
   discountRules: DiscountRule[];
-  isAdmin: boolean;
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const [drafts, setDrafts] = useState<Record<string, { percent: number; active: boolean }>>(
@@ -264,7 +264,7 @@ function DiscountPercentTable({
             <th className="whitespace-nowrap px-3 py-2 font-semibold">Áp dụng cho</th>
             <th className="whitespace-nowrap px-3 py-2 font-semibold">% mặc định</th>
             <th className="whitespace-nowrap px-3 py-2 font-semibold">Đang áp dụng</th>
-            {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
+            {canEdit && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
           </tr>
         </thead>
         <tbody>
@@ -277,7 +277,7 @@ function DiscountPercentTable({
                 </td>
                 <td className="px-3 py-2 text-brand-forest/80">{r.discount_type}</td>
                 <td className="px-3 py-2">
-                  {isAdmin ? (
+                  {canEdit ? (
                     <input
                       type="number"
                       min={0}
@@ -297,7 +297,7 @@ function DiscountPercentTable({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  {isAdmin ? (
+                  {canEdit ? (
                     <input
                       type="checkbox"
                       checked={draft.active}
@@ -314,7 +314,7 @@ function DiscountPercentTable({
                     "Không"
                   )}
                 </td>
-                {isAdmin && (
+                {canEdit && (
                   <td className="px-3 py-2">
                     <button
                       onClick={() => handleSave(r.id)}
@@ -337,10 +337,10 @@ function DiscountPercentTable({
 
 function PricingRulesPanel({
   pricingRules,
-  isAdmin,
+  canEdit,
 }: {
   pricingRules: PricingRule[];
-  isAdmin: boolean;
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<"list" | "form">("list");
@@ -371,7 +371,7 @@ function PricingRulesPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        {isAdmin ? (
+        {canEdit ? (
           <button
             onClick={() => {
               setEditing(null);
@@ -408,7 +408,7 @@ function PricingRulesPanel({
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Giá</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Đồ uống</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng thái</th>
-              {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
+              {canEdit && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
             </tr>
           </thead>
           <tbody>
@@ -432,7 +432,7 @@ function PricingRulesPanel({
                     {r.active ? "Đang áp dụng" : "Tạm ngưng"}
                   </span>
                 </td>
-                {isAdmin && (
+                {canEdit && (
                   <td className="px-3 py-2">
                     <div className="flex gap-2">
                       <button

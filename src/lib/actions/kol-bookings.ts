@@ -5,6 +5,27 @@ import { createClient } from "@/lib/supabase/server";
 import type { BookingStatus } from "@/lib/types/database";
 import { requireEditAccess } from "@/lib/actions/require-edit-access";
 
+async function requireAdmin() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { supabase, error: "Bạn chưa đăng nhập." as const };
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role !== "admin") {
+    return { supabase, error: "Chỉ admin mới có quyền xóa lịch KOL." as const };
+  }
+
+  return { supabase, error: null };
+}
+
 export interface KolBookingInput {
   kol_name: string;
   booked_by_name: string;
@@ -158,8 +179,7 @@ export async function setKolStatus(id: string, status: BookingStatus) {
 }
 
 export async function deleteKolBooking(id: string) {
-  const supabase = await createClient();
-  const { error: authError } = await requireEditAccess(supabase);
+  const { supabase, error: authError } = await requireAdmin();
 
   if (authError) return { error: authError };
 

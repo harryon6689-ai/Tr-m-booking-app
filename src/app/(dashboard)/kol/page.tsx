@@ -25,6 +25,7 @@ export default async function KolPage() {
         initialDate={today}
         currentUserName={user.name}
         canEdit={canEdit(user.role, user.view_only)}
+        isAdmin={user.role === "admin"}
       />
     </div>
   );

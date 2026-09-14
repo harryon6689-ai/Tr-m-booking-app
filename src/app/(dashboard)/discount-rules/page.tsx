@@ -3,7 +3,7 @@ import { getAllDiscountRules } from "@/lib/data/discount-rules";
 import { getAllPricingRules } from "@/lib/data/pricing-rules";
 import { getLocations } from "@/lib/data/locations";
 import { getCurrentUser } from "@/lib/data/current-user";
-import { hasModulePermission, firstPermittedPath } from "@/lib/permissions";
+import { hasModulePermission, firstPermittedPath, canEditPricing } from "@/lib/permissions";
 import DiscountRulesClient from "./DiscountRulesClient";
 
 export default async function DiscountRulesPage() {
@@ -26,7 +26,7 @@ export default async function DiscountRulesPage() {
         discountRules={discountRules}
         pricingRules={pricingRules}
         locations={locations}
-        isAdmin={user.role === "admin"}
+        canEdit={canEditPricing(user.role, user.permissions)}
       />
     </div>
   );

@@ -77,11 +77,15 @@ function SummaryCard({
   value,
   highlight,
   tone = "forest",
+  active,
+  onClick,
 }: {
   label: string;
   value: string;
   highlight?: boolean;
   tone?: "forest" | "red";
+  active?: boolean;
+  onClick?: () => void;
 }) {
   const toneClass = highlight
     ? "text-brand-amber"
@@ -90,10 +94,19 @@ function SummaryCard({
     : "text-brand-forest";
 
   return (
-    <div className="rounded-xl border border-brand-forest/15 bg-white p-4">
-      <p className="text-xs font-medium text-brand-forest/60">{label}</p>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={`rounded-xl border bg-white p-4 text-center transition ${
+        active
+          ? "border-brand-forest ring-2 ring-brand-forest/40"
+          : "border-brand-forest/15 hover:border-brand-forest/40"
+      } ${onClick ? "cursor-pointer" : "cursor-default"}`}
+    >
+      <p className="text-xs font-bold text-brand-forest/60">{label}</p>
       <p className={`mt-1 text-xl font-bold ${toneClass}`}>{value}</p>
-    </div>
+    </button>
   );
 }
 
@@ -140,11 +153,13 @@ export default function KolClient({
   initialDate,
   currentUserName,
   canEdit,
+  isAdmin,
 }: {
   initialBookings: KolBooking[];
   initialDate: string;
   currentUserName: string;
   canEdit: boolean;
+  isAdmin: boolean;
 }) {
   const [mode, setMode] = useState<"list" | "form">("list");
   const [editing, setEditing] = useState<KolBooking | null>(null);
@@ -208,6 +223,10 @@ export default function KolClient({
   function selectThisYear() {
     const now = new Date();
     selectRange(startOfYear(now), endOfYear(now));
+  }
+
+  function toggleReviewStatus(status: ReviewStatusFilter) {
+    setReviewStatus((prev) => (prev === status ? "" : status));
   }
 
   function openCreate() {
@@ -435,16 +454,44 @@ export default function KolClient({
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <SummaryCard label="Tổng KOL đã book" value={String(summary.totalBooked)} />
-        <SummaryCard label="Đã review" value={String(summary.totalReviewed)} />
-        <SummaryCard label="Chưa review" value={String(summary.totalNotReviewed)} />
-        <SummaryCard label="Đã hủy" value={String(summary.totalCancelled)} tone="red" />
+        <SummaryCard
+          label="Tổng KOL đã book"
+          value={String(summary.totalBooked)}
+          active={reviewStatus === ""}
+          onClick={() => setReviewStatus("")}
+        />
+        <SummaryCard
+          label="Đã review"
+          value={String(summary.totalReviewed)}
+          active={reviewStatus === "reviewed"}
+          onClick={() => toggleReviewStatus("reviewed")}
+        />
+        <SummaryCard
+          label="Chưa review"
+          value={String(summary.totalNotReviewed)}
+          active={reviewStatus === "not_reviewed"}
+          onClick={() => toggleReviewStatus("not_reviewed")}
+        />
+        <SummaryCard
+          label="Đã hủy"
+          value={String(summary.totalCancelled)}
+          tone="red"
+          active={reviewStatus === "cancelled"}
+          onClick={() => toggleReviewStatus("cancelled")}
+        />
         <SummaryCard
           label="Chi phí đã review"
           value={formatMoney(summary.reviewedCost)}
           highlight
+          active={reviewStatus === "reviewed"}
+          onClick={() => toggleReviewStatus("reviewed")}
         />
       </div>
+      {reviewStatus !== "" && (
+        <p className="-mt-2 text-xs font-medium text-brand-forest/60">
+          Đang lọc theo mục đã chọn ở trên — bấm lại vào thẻ đó để bỏ lọc.
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-brand-forest/15 bg-white">
         <table className="w-full text-left text-sm">
@@ -457,7 +504,7 @@ export default function KolClient({
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Trạng Thái</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Đánh giá</th>
               <th className="whitespace-nowrap px-3 py-2 font-semibold">Người Book KOL</th>
-              {canEdit && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
+              {isAdmin && <th className="whitespace-nowrap px-3 py-2 font-semibold"></th>}
             </tr>
           </thead>
           <tbody>
@@ -564,7 +611,7 @@ export default function KolClient({
                 <td className="px-3 py-2 text-brand-forest/80">
                   {b.booked_by_name || "-"}
                 </td>
-                {canEdit && (
+                {isAdmin && (
                   <td className="px-3 py-2">
                     <button
                       onClick={() => handleDelete(b)}

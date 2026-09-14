@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requirePricingEditAccess } from "@/lib/actions/require-edit-access";
 import type { LocationType, PricingMode } from "@/lib/types/database";
 
 export interface PricingRuleInput {
@@ -19,27 +20,6 @@ export interface PricingRuleInput {
   display_order: number;
 }
 
-async function requireAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { supabase, error: "Bạn chưa đăng nhập." as const };
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (profile?.role !== "admin") {
-    return { supabase, error: "Chỉ admin mới có quyền sửa chính sách giá." as const };
-  }
-
-  return { supabase, error: null };
-}
-
 export async function getPricingRules() {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -52,7 +32,7 @@ export async function getPricingRules() {
 }
 
 export async function createPricingRule(input: PricingRuleInput) {
-  const { supabase, error: authError } = await requireAdmin();
+  const { supabase, error: authError } = await requirePricingEditAccess();
   if (authError) return { error: authError };
 
   const { error } = await supabase.from("pricing_rules").insert(input);
@@ -63,7 +43,7 @@ export async function createPricingRule(input: PricingRuleInput) {
 }
 
 export async function updatePricingRule(id: string, input: PricingRuleInput) {
-  const { supabase, error: authError } = await requireAdmin();
+  const { supabase, error: authError } = await requirePricingEditAccess();
   if (authError) return { error: authError };
 
   const { error } = await supabase.from("pricing_rules").update(input).eq("id", id);
@@ -74,7 +54,7 @@ export async function updatePricingRule(id: string, input: PricingRuleInput) {
 }
 
 export async function setPricingRuleActive(id: string, active: boolean) {
-  const { supabase, error: authError } = await requireAdmin();
+  const { supabase, error: authError } = await requirePricingEditAccess();
   if (authError) return { error: authError };
 
   const { error } = await supabase

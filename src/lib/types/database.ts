@@ -27,6 +27,7 @@ export interface UserPermissions {
   fixed_customers: boolean;
   preferred_customers: boolean;
   discount_rules: boolean;
+  discount_rules_edit: boolean;
   checkin: boolean;
   quick_booking: boolean;
 }

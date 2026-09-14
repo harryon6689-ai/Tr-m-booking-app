@@ -58,7 +58,15 @@ function permissionSummary(
   if (role === "admin") return "Toàn quyền (Admin)";
   const total = PERMISSION_MODULES.length;
   const enabled = PERMISSION_MODULES.filter((m) => permissions[m.key]).length;
-  return `${enabled}/${total} module${viewOnly ? " · Chỉ xem" : ""}`;
+  const suffix = [
+    viewOnly ? "Chỉ xem" : null,
+    permissions.discount_rules && permissions.discount_rules_edit
+      ? "Sửa CS giá"
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return `${enabled}/${total} module${suffix ? " · " + suffix : ""}`;
 }
 
 export default function StaffClient({
@@ -483,17 +491,26 @@ function StaffForm({
           </label>
           <div className="flex flex-col gap-1.5 rounded-lg border border-brand-forest/15 p-3">
             {PERMISSION_MODULES.map((m) => (
-              <label
-                key={m.key}
-                className="flex items-center gap-2 text-sm text-brand-forest"
-              >
-                <input
-                  type="checkbox"
-                  checked={permissions[m.key]}
-                  onChange={() => togglePermission(m.key)}
-                />
-                {m.label}
-              </label>
+              <div key={m.key}>
+                <label className="flex items-center gap-2 text-sm text-brand-forest">
+                  <input
+                    type="checkbox"
+                    checked={permissions[m.key]}
+                    onChange={() => togglePermission(m.key)}
+                  />
+                  {m.label}
+                </label>
+                {m.key === "discount_rules" && permissions.discount_rules && (
+                  <label className="ml-6 mt-1 flex items-center gap-2 text-sm text-brand-forest/80">
+                    <input
+                      type="checkbox"
+                      checked={permissions.discount_rules_edit}
+                      onChange={() => togglePermission("discount_rules_edit")}
+                    />
+                    Được sửa (mặc định chỉ xem)
+                  </label>
+                )}
+              </div>
             ))}
           </div>
         </div>

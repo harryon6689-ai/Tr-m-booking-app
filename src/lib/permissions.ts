@@ -20,6 +20,7 @@ export const DEFAULT_STAFF_PERMISSIONS: UserPermissions = {
   fixed_customers: true,
   preferred_customers: true,
   discount_rules: true,
+  discount_rules_edit: false,
 };
 
 export function hasModulePermission(
@@ -40,4 +41,16 @@ export function firstPermittedPath(permissions: UserPermissions | null | undefin
 /** Admins always keep full edit access; a "view only" staff account can see but not mutate. */
 export function canEdit(role: UserRole, viewOnly: boolean): boolean {
   return role === "admin" || !viewOnly;
+}
+
+/**
+ * Chính sách giá (discount/pricing rules) is view-only for staff by default —
+ * a separate opt-in flag (independent of the account-wide "view only" toggle)
+ * lets an admin grant a specific staff member edit access to this page.
+ */
+export function canEditPricing(
+  role: UserRole,
+  permissions: UserPermissions | null | undefined
+): boolean {
+  return role === "admin" || permissions?.discount_rules_edit === true;
 }
