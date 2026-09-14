@@ -5,13 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import type { BookingStatus } from "@/lib/types/database";
 import { requireEditAccess } from "@/lib/actions/require-edit-access";
 
-async function requireAdmin() {
+async function requireAdmin(action: string = "thực hiện thao tác này") {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { supabase, error: "Bạn chưa đăng nhập." as const };
+  if (!user) return { supabase, error: "Bạn chưa đăng nhập." as const, userId: null };
 
   const { data: profile } = await supabase
     .from("users")
@@ -20,10 +20,10 @@ async function requireAdmin() {
     .single();
 
   if (profile?.role !== "admin") {
-    return { supabase, error: "Chỉ admin mới có quyền xóa lịch KOL." as const };
+    return { supabase, error: `Chỉ admin mới có quyền ${action}.`, userId: null };
   }
 
-  return { supabase, error: null };
+  return { supabase, error: null, userId: user.id };
 }
 
 export interface KolBookingInput {
@@ -108,7 +108,35 @@ export async function createKolBooking(input: KolBookingInput) {
   return { error: null };
 }
 
+/**
+ * Editing an existing KOL booking's info (name, phone, deal, price, etc.) is
+ * admin-only — staff can only update review status and gift quantities via
+ * setKolReviewed/setKolStatus/setKolGift, not this full-record update.
+ */
 export async function updateKolBooking(id: string, input: KolBookingInput) {
+  const { supabase, userId, error: authError } = await requireAdmin("sửa thông tin KOL");
+
+  if (authError) return { error: authError };
+
+  const { error } = await supabase
+    .from("kol_bookings")
+    .update({ ...input, created_by: userId })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/kol");
+  return { error: null };
+}
+
+/** Staff-safe: only touches gift fields, never other KOL info. */
+export async function setKolGift(
+  id: string,
+  giftDrink: boolean,
+  giftDrinkQuantity: number | null,
+  giftCake: boolean,
+  giftCakeQuantity: number | null
+) {
   const supabase = await createClient();
   const { userId, error: authError } = await requireEditAccess(supabase);
 
@@ -116,7 +144,13 @@ export async function updateKolBooking(id: string, input: KolBookingInput) {
 
   const { error } = await supabase
     .from("kol_bookings")
-    .update({ ...input, created_by: userId })
+    .update({
+      gift_drink: giftDrink,
+      gift_drink_quantity: giftDrink ? giftDrinkQuantity : null,
+      gift_cake: giftCake,
+      gift_cake_quantity: giftCake ? giftCakeQuantity : null,
+      created_by: userId,
+    })
     .eq("id", id);
 
   if (error) return { error: error.message };
@@ -165,7 +199,19 @@ export async function setKolStatus(id: string, status: BookingStatus) {
   const supabase = await createClient();
   const { userId, error: authError } = await requireEditAccess(supabase);
 
-  if (authError) return { error: authError };
+  if (authError || !userId) return { error: authError ?? "Bạn chưa đăng nhập." };
+
+  // Cancelling a KOL is admin-only — staff may only toggle Đã Review / Chưa Review.
+  if (status === "hủy") {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", userId)
+      .single();
+    if (profile?.role !== "admin") {
+      return { error: "Chỉ admin mới có quyền hủy lịch KOL." };
+    }
+  }
 
   const { error } = await supabase
     .from("kol_bookings")
@@ -179,7 +225,7 @@ export async function setKolStatus(id: string, status: BookingStatus) {
 }
 
 export async function deleteKolBooking(id: string) {
-  const { supabase, error: authError } = await requireAdmin();
+  const { supabase, error: authError } = await requireAdmin("xóa lịch KOL");
 
   if (authError) return { error: authError };
 
@@ -192,8 +238,7 @@ export async function deleteKolBooking(id: string) {
 }
 
 export async function cancelKolBooking(id: string) {
-  const supabase = await createClient();
-  const { userId, error: authError } = await requireEditAccess(supabase);
+  const { supabase, userId, error: authError } = await requireAdmin("hủy lịch KOL");
 
   if (authError) return { error: authError };
 

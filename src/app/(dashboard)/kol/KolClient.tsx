@@ -11,6 +11,7 @@ import {
   setKolReviewed,
   setKolEffectivenessRating,
   setKolStatus,
+  setKolGift,
   type KolBookingInput,
   type ReviewStatusFilter,
   type EffectiveFilter,
@@ -332,6 +333,7 @@ export default function KolClient({
         booking={editing}
         currentUserName={currentUserName}
         canEdit={canEdit}
+        isAdmin={isAdmin}
         onDone={() => {
           setMode("list");
           refetch();
@@ -548,9 +550,13 @@ export default function KolClient({
                 </td>
                 <td className="px-3 py-2 text-brand-forest/80">
                   {formatMoney(b.review_price)}
-                  <span className="block text-xs text-brand-forest/60">
-                    {formatGifts(b)}
-                  </span>
+                  {canEdit ? (
+                    <GiftInlineEditor key={b.id} booking={b} onSaved={refetch} />
+                  ) : (
+                    <span className="block text-xs text-brand-forest/60">
+                      {formatGifts(b)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-brand-forest/80">
                   {b.video_links.length > 0 ? (
@@ -586,7 +592,7 @@ export default function KolClient({
                         e.target.value as "not_reviewed" | "reviewed" | "cancelled"
                       )
                     }
-                    disabled={!canEdit}
+                    disabled={!canEdit || (!isAdmin && b.status === "hủy")}
                     className={`rounded-full border-none px-2 py-1 text-xs font-bold outline-none disabled:opacity-70 ${
                       b.status === "hủy"
                         ? "bg-red-100 text-red-600"
@@ -597,7 +603,9 @@ export default function KolClient({
                   >
                     <option value="not_reviewed">Chưa review</option>
                     <option value="reviewed">Đã review</option>
-                    <option value="cancelled">Hủy</option>
+                    {(isAdmin || b.status === "hủy") && (
+                      <option value="cancelled">Hủy</option>
+                    )}
                   </select>
                 </td>
                 <td className="px-3 py-2">
@@ -638,19 +646,121 @@ export default function KolClient({
   );
 }
 
+/** Inline "số lượng đồ uống/bánh" editor for the list row — staff can use this
+ * without opening the full edit form (which is admin-only for existing KOL). */
+function GiftInlineEditor({
+  booking,
+  onSaved,
+}: {
+  booking: KolBooking;
+  onSaved: () => void;
+}) {
+  const [drink, setDrink] = useState(booking.gift_drink);
+  const [drinkQty, setDrinkQty] = useState(
+    booking.gift_drink_quantity != null ? String(booking.gift_drink_quantity) : "1"
+  );
+  const [cake, setCake] = useState(booking.gift_cake);
+  const [cakeQty, setCakeQty] = useState(
+    booking.gift_cake_quantity != null ? String(booking.gift_cake_quantity) : "1"
+  );
+  const [saving, setSaving] = useState(false);
+
+  async function save(next: {
+    drink: boolean;
+    drinkQty: string;
+    cake: boolean;
+    cakeQty: string;
+  }) {
+    setSaving(true);
+    const result = await setKolGift(
+      booking.id,
+      next.drink,
+      next.drink ? Number(next.drinkQty) || 1 : null,
+      next.cake,
+      next.cake ? Number(next.cakeQty) || 1 : null
+    );
+    setSaving(false);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <div className="mt-1 flex flex-col gap-1 text-xs">
+      <label className="flex items-center gap-1">
+        <input
+          type="checkbox"
+          checked={drink}
+          disabled={saving}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            setDrink(checked);
+            save({ drink: checked, drinkQty, cake, cakeQty });
+          }}
+        />
+        Đồ uống
+        {drink && (
+          <input
+            type="number"
+            min={1}
+            value={drinkQty}
+            disabled={saving}
+            onChange={(e) => setDrinkQty(e.target.value)}
+            onBlur={() => save({ drink, drinkQty, cake, cakeQty })}
+            className="w-12 rounded border border-brand-forest/30 px-1 py-0.5"
+          />
+        )}
+      </label>
+      <label className="flex items-center gap-1">
+        <input
+          type="checkbox"
+          checked={cake}
+          disabled={saving}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            setCake(checked);
+            save({ drink, drinkQty, cake: checked, cakeQty });
+          }}
+        />
+        Bánh
+        {cake && (
+          <input
+            type="number"
+            min={1}
+            value={cakeQty}
+            disabled={saving}
+            onChange={(e) => setCakeQty(e.target.value)}
+            onBlur={() => save({ drink, drinkQty, cake, cakeQty })}
+            className="w-12 rounded border border-brand-forest/30 px-1 py-0.5"
+          />
+        )}
+      </label>
+    </div>
+  );
+}
+
 function KolForm({
   booking,
   currentUserName,
   canEdit,
+  isAdmin,
   onDone,
   onCancel,
 }: {
   booking: KolBooking | null;
   currentUserName: string;
   canEdit: boolean;
+  isAdmin: boolean;
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const isEditingExisting = booking !== null;
+  // Editing an existing KOL's info (name, phone, deal, price...) is admin-only;
+  // staff update status/gift quantity inline in the list instead. Creating a
+  // brand-new KOL booking is still open to any account with edit access.
+  const fieldsEditable = canEdit && (!isEditingExisting || isAdmin);
   const [kolName, setKolName] = useState(booking?.kol_name ?? "");
   const [bookedByName, setBookedByName] = useState(
     booking?.booked_by_name ?? currentUserName
@@ -768,7 +878,13 @@ function KolForm({
           Tài khoản chỉ xem — bạn có thể xem chi tiết nhưng không thể tạo/sửa/hủy lịch KOL.
         </p>
       )}
-      <fieldset disabled={!canEdit} className="contents">
+      {canEdit && isEditingExisting && !isAdmin && (
+        <p className="rounded-lg bg-brand-amber/10 px-3 py-2 text-xs font-medium text-brand-forest/70">
+          Tài khoản nhân viên chỉ có thể cập nhật trạng thái Đã Review/Chưa Review và số
+          lượng quà tặng ngay trong danh sách — không thể sửa các thông tin KOL khác tại đây.
+        </p>
+      )}
+      <fieldset disabled={!fieldsEditable} className="contents">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-brand-forest">
@@ -1071,7 +1187,7 @@ function KolForm({
         >
           Quay lại
         </button>
-        {canEdit && (
+        {fieldsEditable && (
           <div className="flex gap-2">
             {booking && booking.status !== "hủy" && (
               <button
