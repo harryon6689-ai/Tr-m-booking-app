@@ -220,9 +220,9 @@ function DiscountPercentTable({
   canEdit: boolean;
 }) {
   const router = useRouter();
-  const [drafts, setDrafts] = useState<Record<string, { percent: number; active: boolean }>>(
+  const [drafts, setDrafts] = useState<Record<string, { percent: string; active: boolean }>>(
     Object.fromEntries(
-      discountRules.map((r) => [r.id, { percent: r.default_percent, active: r.active }])
+      discountRules.map((r) => [r.id, { percent: String(r.default_percent), active: r.active }])
     )
   );
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -230,8 +230,9 @@ function DiscountPercentTable({
   async function handleSave(id: string) {
     setSavingId(id);
     const draft = drafts[id];
+    const percent = Math.max(0, Math.min(100, Number(draft.percent) || 0));
     const result = await updateDiscountRule(id, {
-      default_percent: draft.percent,
+      default_percent: percent,
       active: draft.active,
     });
     setSavingId(null);
@@ -287,7 +288,7 @@ function DiscountPercentTable({
                       onChange={(e) =>
                         setDrafts((d) => ({
                           ...d,
-                          [r.id]: { ...d[r.id], percent: Number(e.target.value) },
+                          [r.id]: { ...d[r.id], percent: e.target.value },
                         }))
                       }
                       className="w-20 rounded-lg border border-brand-forest/30 px-2 py-1 outline-none focus:border-brand-amber"
