@@ -31,6 +31,14 @@ function formatTimeRange(startIso: string, endIso: string) {
   return `${fmt(startIso)} - ${fmt(endIso)}`;
 }
 
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 function formatMoney(n: number) {
   return n.toLocaleString("vi-VN") + "đ";
 }
@@ -371,6 +379,7 @@ export default function CheckInClient({
   });
 
   const exportRows = filteredRows.map((r) => ({
+    Ngày: formatDate(r.start_time),
     Giờ: formatTimeRange(r.start_time, r.end_time),
     "Vị trí": r.location_name,
     "Khách hàng": r.customer_name,
