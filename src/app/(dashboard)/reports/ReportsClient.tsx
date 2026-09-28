@@ -52,6 +52,7 @@ export default function ReportsClient({
     exportMultiSheetExcel(`bao-cao-doanh-thu_${dateFrom}_${dateTo}`, [
       {
         name: "Tổng quan",
+        title: `Báo cáo doanh thu TRẠM Coworking (${dateFrom} - ${dateTo})`,
         rows: [
           {
             "Từ ngày": dateFrom,
@@ -70,6 +71,7 @@ export default function ReportsClient({
       },
       {
         name: "Theo vị trí",
+        title: "Doanh thu theo vị trí",
         rows: summary.byLocation.map((l) => ({
           "Vị trí": l.location_name,
           "Lượt đặt": l.count,
@@ -78,6 +80,7 @@ export default function ReportsClient({
       },
       {
         name: "Theo ngày",
+        title: "Doanh thu theo ngày",
         rows: summary.byDay.map((d) => ({
           Ngày: d.date,
           "Doanh thu": d.revenue,

@@ -214,6 +214,7 @@ export default function StaffClient({
           <ExportExcelButton
             filename="danh-sach-nhan-vien"
             sheetName="Nhân viên"
+            title="Danh sách tài khoản nhân viên"
             rows={accounts.map((a) => ({
               Tên: a.name,
               "Số điện thoại": a.phone ?? "",

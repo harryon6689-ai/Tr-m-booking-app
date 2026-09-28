@@ -6,15 +6,17 @@ export default function ExportExcelButton({
   filename,
   rows,
   sheetName,
+  title,
 }: {
   filename: string;
   rows: Record<string, string | number>[];
   sheetName?: string;
+  title?: string;
 }) {
   return (
     <button
       type="button"
-      onClick={() => exportToExcel(filename, rows, sheetName)}
+      onClick={() => exportToExcel(filename, rows, sheetName, title)}
       disabled={rows.length === 0}
       className="rounded-lg border border-brand-forest/30 px-3 py-1.5 text-sm font-semibold text-brand-forest hover:bg-brand-cream disabled:opacity-50"
     >

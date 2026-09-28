@@ -191,6 +191,7 @@ export default function HistoryClient({
             <ExportExcelButton
               filename="lich-su-dat-cho"
               sheetName="Lịch sử"
+              title="Lịch sử đặt chỗ"
               rows={rows.map((r) => ({
                 "Ngày giờ": formatDateTime(r.start_time),
                 "Vị trí": r.location_name,
@@ -294,6 +295,7 @@ export default function HistoryClient({
             <ExportExcelButton
               filename="khach-dat-lai"
               sheetName="Khách đặt lại"
+              title="Danh sách khách đặt lại (khách hàng quen)"
               rows={repeatCustomers.map((c) => ({
                 "Khách hàng": c.name,
                 SĐT: c.phone,

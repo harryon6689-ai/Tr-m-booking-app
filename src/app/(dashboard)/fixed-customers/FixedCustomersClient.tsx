@@ -205,6 +205,7 @@ export default function FixedCustomersClient({
         <ExportExcelButton
           filename="khach-co-dinh"
           sheetName="Khách cố định"
+          title="Danh sách khách cố định"
           rows={filteredCustomers.map((rule) => ({
             "Khách hàng": rule.customer_name,
             SĐT: rule.phone ?? "",

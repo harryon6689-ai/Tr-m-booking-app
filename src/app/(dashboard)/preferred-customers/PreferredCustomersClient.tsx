@@ -123,6 +123,7 @@ export default function PreferredCustomersClient({
         <ExportExcelButton
           filename="khach-vip-kol"
           sheetName="Khách VIP-KOL"
+          title="Danh sách khách VIP/KOL"
           rows={preferredCustomers.map((c) => ({
             "Tên khách": c.name,
             SĐT: c.phone ?? "",

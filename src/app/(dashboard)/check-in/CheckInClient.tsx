@@ -523,6 +523,7 @@ export default function CheckInClient({
             filename={`khach-da-booking_${dateFrom}_${dateTo}`}
             rows={exportRows}
             sheetName="Khách đã booking"
+            title={`Danh sách khách đã booking (${dateFrom} - ${dateTo})`}
           />
         </div>
       </div>

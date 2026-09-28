@@ -429,6 +429,7 @@ export default function KolClient({
           <ExportExcelButton
             filename="lich-kol-review"
             sheetName="KOL"
+            title={`Danh sách lịch KOL Review (${dateFrom} - ${dateTo})`}
             rows={bookings.map((b) => ({
               KOL: b.kol_name,
               SĐT: b.phone ?? "",

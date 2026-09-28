@@ -249,6 +249,7 @@ function DiscountPercentTable({
         <ExportExcelButton
           filename="chinh-sach-giam-gia"
           sheetName="Giảm giá"
+          title="Chính sách giảm giá % mặc định"
           rows={discountRules.map((r) => ({
             "Loại khách": r.customer_type,
             "Áp dụng cho": r.discount_type,
@@ -388,6 +389,7 @@ function PricingRulesPanel({
         <ExportExcelButton
           filename="chinh-sach-gia-phong"
           sheetName="Giá phòng"
+          title="Chính sách giá phòng"
           rows={pricingRules.map((r) => ({
             "Vị trí": r.location_type,
             "Chính sách": r.rule_name,
