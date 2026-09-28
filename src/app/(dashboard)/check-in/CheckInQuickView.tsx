@@ -27,6 +27,14 @@ function formatTimeRange(startIso: string, endIso: string) {
   return `${fmt(startIso)} - ${fmt(endIso)}`;
 }
 
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 export default function CheckInQuickView({
   row,
   minimumSpend,
@@ -69,6 +77,7 @@ export default function CheckInQuickView({
         <div className="rounded-lg border border-brand-forest/15 px-4">
           <ReviewRow label="Vị trí" value={row.location_name} />
           {row.seat_number && <ReviewRow label="Số vị trí" value={row.seat_number} />}
+          <ReviewRow label="Ngày" value={formatDate(row.start_time)} />
           <ReviewRow label="Giờ" value={formatTimeRange(row.start_time, row.end_time)} />
           <ReviewRow label="Số điện thoại" value={row.phone || "-"} />
           <ReviewRow
