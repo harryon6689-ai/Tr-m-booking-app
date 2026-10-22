@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/types/database";
 import CalendarBookingModal from "@/components/CalendarBookingModal";
@@ -70,6 +71,8 @@ function PeriodBadges({
   );
 }
 
+type TodaysKolBooking = { kol_name: string; start_time: string | null; end_time: string | null };
+
 interface FloorMapGridProps {
   locations: Location[];
   bookings: Booking[];
@@ -78,6 +81,9 @@ interface FloorMapGridProps {
   preferredCustomers: PreferredCustomer[];
   canEdit: boolean;
   isAdmin: boolean;
+  /** null = account has no access to the KOL module, so the card is hidden entirely. */
+  todaysKol: TodaysKolBooking[] | null;
+  canSeeCheckin: boolean;
 }
 
 export default function FloorMapGrid({
@@ -88,6 +94,8 @@ export default function FloorMapGrid({
   preferredCustomers,
   canEdit,
   isAdmin,
+  todaysKol,
+  canSeeCheckin,
 }: FloorMapGridProps) {
   const router = useRouter();
   const [now, setNow] = useState(() => new Date());
@@ -152,8 +160,35 @@ export default function FloorMapGrid({
   const boxes = locations.filter((l) => l.type === "box");
   const outdoor = locations.filter((l) => l.type === "ghế ngoài");
 
+  function outdoorBookedSeatsNow(location: Location) {
+    const list = bookingsByLocation.get(location.id) ?? [];
+    return list.filter(
+      (b) => b.status !== "hủy" && new Date(b.start_time) <= now && now <= new Date(b.end_time)
+    ).length;
+  }
+
+  const indoorUnits = [...rooms, ...boxes];
+  const occupiedIndoorNow = indoorUnits.filter((l) => currentBooking(l.id)).length;
+  const freeIndoorNow = indoorUnits.length - occupiedIndoorNow;
+  const outdoorCapacityTotal = outdoor.reduce((sum, l) => sum + l.capacity, 0);
+  const outdoorBookedNow = outdoor.reduce((sum, l) => sum + outdoorBookedSeatsNow(l), 0);
+  const outdoorFreeNow = Math.max(outdoorCapacityTotal - outdoorBookedNow, 0);
+  const totalBookedToday = bookings.filter((b) => b.status !== "hủy").length;
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
+      <OverviewSummary
+        totalBookedToday={totalBookedToday}
+        freeIndoorNow={freeIndoorNow}
+        occupiedIndoorNow={occupiedIndoorNow}
+        totalIndoorUnits={indoorUnits.length}
+        outdoorFreeNow={outdoor.length > 0 ? outdoorFreeNow : null}
+        outdoorCapacityTotal={outdoorCapacityTotal}
+        todaysKol={todaysKol}
+        canSeeCheckin={canSeeCheckin}
+      />
+
+      <div id="phong-box-grid" className="flex flex-col gap-3 scroll-mt-20">
       <Row title="Phòng họp">
         {rooms.map((loc) => (
           <Cell
@@ -177,8 +212,9 @@ export default function FloorMapGrid({
           />
         ))}
       </Row>
+      </div>
 
-      <Row title="Khu ngồi ngoài">
+      <Row title="Khu ngồi ngoài" id="khu-ngoai-grid">
         {outdoor.map((loc) => {
           const list = bookingsByLocation.get(loc.id) ?? [];
           const bookedSeats = list.filter(
@@ -214,9 +250,155 @@ export default function FloorMapGrid({
   );
 }
 
-function Row({ title, children }: { title: string; children: React.ReactNode }) {
+function formatKolTime(kol: TodaysKolBooking) {
+  if (!kol.start_time) return "";
+  const range = kol.end_time
+    ? `${kol.start_time.slice(0, 5)} - ${kol.end_time.slice(0, 5)}`
+    : kol.start_time.slice(0, 5);
+  return ` (${range})`;
+}
+
+function scrollToSection(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function OverviewSummary({
+  totalBookedToday,
+  freeIndoorNow,
+  occupiedIndoorNow,
+  totalIndoorUnits,
+  outdoorFreeNow,
+  outdoorCapacityTotal,
+  todaysKol,
+  canSeeCheckin,
+}: {
+  totalBookedToday: number;
+  freeIndoorNow: number;
+  occupiedIndoorNow: number;
+  totalIndoorUnits: number;
+  outdoorFreeNow: number | null;
+  outdoorCapacityTotal: number;
+  todaysKol: TodaysKolBooking[] | null;
+  canSeeCheckin: boolean;
+}) {
   return (
     <section>
+      <h2 className="mb-1.5 text-sm font-semibold uppercase tracking-wide text-brand-forest/60">
+        Tổng quan hôm nay
+      </h2>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <OverviewCard
+          label="Khách đã đặt hôm nay"
+          value={String(totalBookedToday)}
+          tone="forest"
+          href={canSeeCheckin ? "/check-in" : undefined}
+        />
+        <OverviewCard
+          label="Phòng/Box còn trống"
+          value={`${freeIndoorNow}/${totalIndoorUnits}`}
+          tone={freeIndoorNow > 0 ? "green" : "red"}
+          onClick={() => scrollToSection("phong-box-grid")}
+        />
+        <OverviewCard
+          label="Phòng/Box đang có khách"
+          value={`${occupiedIndoorNow}/${totalIndoorUnits}`}
+          tone={occupiedIndoorNow > 0 ? "amber" : "forest"}
+          onClick={() => scrollToSection("phong-box-grid")}
+        />
+        {outdoorFreeNow !== null && (
+          <OverviewCard
+            label="Chỗ ngồi ngoài còn trống"
+            value={`${outdoorFreeNow}/${outdoorCapacityTotal}`}
+            tone={outdoorFreeNow > 0 ? "green" : "red"}
+            onClick={() => scrollToSection("khu-ngoai-grid")}
+          />
+        )}
+        {todaysKol !== null && (
+          <OverviewCard
+            label="KOL hôm nay"
+            value={todaysKol.length > 0 ? `Có ${todaysKol.length} KOL` : "Không có KOL"}
+            tone={todaysKol.length > 0 ? "amber" : "forest"}
+            detail={
+              todaysKol.length > 0
+                ? todaysKol.map((k) => `${k.kol_name}${formatKolTime(k)}`).join(", ")
+                : undefined
+            }
+            href="/kol"
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function OverviewCard({
+  label,
+  value,
+  tone,
+  detail,
+  href,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  tone: "forest" | "amber" | "green" | "red";
+  detail?: string;
+  /** Navigates to another page's matching list. */
+  href?: string;
+  /** Scrolls to the matching section further down this same page. */
+  onClick?: () => void;
+}) {
+  const toneClass = {
+    forest: "text-brand-forest",
+    amber: "text-brand-amber",
+    green: "text-green-700",
+    red: "text-red-600",
+  }[tone];
+
+  const content = (
+    <>
+      <p className="text-xs font-bold text-brand-forest/60">{label}</p>
+      <p className={`mt-1 text-xl font-bold ${toneClass}`}>{value}</p>
+      {detail && (
+        <p className="mt-1 truncate text-xs text-brand-forest/60" title={detail}>
+          {detail}
+        </p>
+      )}
+    </>
+  );
+
+  const className =
+    "block w-full rounded-xl border border-brand-forest/15 bg-white p-4 text-center transition " +
+    (href || onClick ? "cursor-pointer hover:border-brand-forest/40 hover:shadow-md" : "");
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {content}
+      </Link>
+    );
+  }
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    );
+  }
+  return <div className={className}>{content}</div>;
+}
+
+function Row({
+  title,
+  id,
+  children,
+}: {
+  title: string;
+  id?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className={id ? "scroll-mt-20" : undefined}>
       <h2 className="mb-1.5 text-sm font-semibold uppercase tracking-wide text-brand-forest/60">
         {title}
       </h2>
